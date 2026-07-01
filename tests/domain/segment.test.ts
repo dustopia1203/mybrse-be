@@ -40,14 +40,34 @@ describe('SegmentSchema', () => {
     expect(SegmentSchema.parse(finalSegment)).toEqual(finalSegment)
   })
 
+  it('accepts equal start and end offsets', () => {
+    const zeroDurationSegment = {
+      ...validSegment,
+      endMs: validSegment.startMs,
+    }
+
+    expect(SegmentSchema.parse(zeroDurationSegment)).toEqual(
+      zeroDurationSegment,
+    )
+  })
+
   it('rejects an end offset before the start offset', () => {
-    expect(() =>
-      SegmentSchema.parse({
-        ...validSegment,
-        startMs: 2_400,
-        endMs: 1_200,
-      }),
-    ).toThrow('endMs must be greater than or equal to startMs')
+    const result = SegmentSchema.safeParse({
+      ...validSegment,
+      startMs: 2_400,
+      endMs: 1_200,
+    })
+
+    expect(result.success).toBe(false)
+    if (result.success) {
+      throw new Error('Expected segment validation to fail')
+    }
+
+    expect(result.error.issues).toHaveLength(1)
+    expect(result.error.issues[0]?.message).toBe(
+      'endMs must be greater than or equal to startMs',
+    )
+    expect(result.error.issues[0]?.path).toEqual(['endMs'])
   })
 
   it('rejects persistence attributes outside the canonical shape', () => {
