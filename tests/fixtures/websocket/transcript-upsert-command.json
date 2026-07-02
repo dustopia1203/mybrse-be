@@ -1,0 +1,11 @@
+{
+  "action": "transcript.upsert",
+  "sessionId": "s-123",
+  "segmentId": "seg-10",
+  "sequence": 10,
+  "revision": 3,
+  "text": "こんにちは",
+  "isFinal": false,
+  "startMs": 1200,
+  "endMs": 2400
+}

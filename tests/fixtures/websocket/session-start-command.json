@@ -1,0 +1,6 @@
+{
+  "action": "session.start",
+  "sessionId": "s-123",
+  "sourceLanguage": "ja",
+  "targetLanguage": "vi"
+}
