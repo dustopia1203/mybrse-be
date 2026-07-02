@@ -1,0 +1,9 @@
+{
+  "type": "subtitle.draft",
+  "sessionId": "s-123",
+  "segmentId": "seg-10",
+  "sequence": 10,
+  "revision": 3,
+  "text": "Xin chào",
+  "isFinal": false
+}

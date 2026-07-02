@@ -1,0 +1,6 @@
+{
+  "type": "translation.error",
+  "stage": "contract",
+  "code": "UNSUPPORTED_ACTION",
+  "retryable": false
+}

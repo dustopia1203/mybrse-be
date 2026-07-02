@@ -1,0 +1,9 @@
+{
+  "type": "translation.error",
+  "stage": "draft",
+  "code": "PROVIDER_UNAVAILABLE",
+  "retryable": true,
+  "sessionId": "s-123",
+  "segmentId": "seg-10",
+  "revision": 4
+}

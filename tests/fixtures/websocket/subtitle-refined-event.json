@@ -1,0 +1,9 @@
+{
+  "type": "subtitle.refined",
+  "sessionId": "s-123",
+  "segmentId": "seg-10",
+  "sequence": 10,
+  "revision": 4,
+  "text": "Xin chào.",
+  "isFinal": true
+}
