@@ -4,7 +4,7 @@ import {
   APPLICATION_ERROR_RETRYABILITY,
   ApplicationErrorCodeSchema,
   ApplicationErrorSchema,
-} from '../../src/domain/application-error'
+} from '../../src/domain'
 
 describe('ApplicationErrorSchema', () => {
   it('parses every application error code with its normalized retryability', () => {
