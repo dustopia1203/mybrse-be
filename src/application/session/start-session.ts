@@ -1,8 +1,8 @@
 import {
   APPLICATION_ERROR_RETRYABILITY,
+  SessionSchema,
   type ApplicationError,
   type LanguageCode,
-  type Session,
   type SessionId,
   type UnixTimeMilliseconds,
 } from '../../domain'
@@ -31,15 +31,26 @@ export const createStartSession =
   ({ repository, nowMs, sessionRetentionSeconds }: StartSessionDependencies) =>
   async (input: StartSessionInput): Promise<StartSessionResult> => {
     const createdAtMs = nowMs()
-    const session: Session = {
+    const candidateSession = SessionSchema.safeParse({
       sessionId: input.sessionId,
       sourceLanguage: input.sourceLanguage,
       targetLanguage: input.targetLanguage,
       createdAtMs,
       expiresAt: Math.floor(createdAtMs / 1_000) + sessionRetentionSeconds,
+    })
+    if (!candidateSession.success) {
+      return {
+        kind: 'failed',
+        error: {
+          code: 'CONFIGURATION_ERROR',
+          message: 'Session timing configuration is invalid',
+          retryable: APPLICATION_ERROR_RETRYABILITY.CONFIGURATION_ERROR,
+        },
+      }
     }
+
     const result = await repository.startOrReattach({
-      session,
+      session: candidateSession.data,
       connection: input.connection,
     })
 

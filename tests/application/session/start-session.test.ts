@@ -110,4 +110,23 @@ describe('createStartSession', () => {
       error,
     })
   })
+
+  it('fails without persistence when the configured retention overflows expiry', async () => {
+    const repository = new StubSessionLifecycleRepository({ kind: 'created' })
+    const startSession = createStartSession({
+      repository,
+      nowMs: () => 1_750_000_000_123,
+      sessionRetentionSeconds: Number.MAX_SAFE_INTEGER,
+    })
+
+    await expect(startSession(input)).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'CONFIGURATION_ERROR',
+        message: 'Session timing configuration is invalid',
+        retryable: false,
+      },
+    })
+    expect(repository.receivedInput).toBeUndefined()
+  })
 })
