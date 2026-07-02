@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   TranslationContextEntrySchema,
   TranslationContextSchema,
-} from '../../src/domain/context'
+} from '../../src/domain'
 
 const draftEntry = {
   segmentId: 'seg-8',
