@@ -21,9 +21,13 @@ export class InMemorySessionLifecycleRepository implements SessionLifecycleRepos
   ): Promise<StartOrReattachSessionResult> {
     const stored = this.sessions.get(input.session.sessionId)
     if (stored === undefined) {
+      this.releaseConnectionFromPriorSession(
+        input.connection.connectionId,
+        input.session.sessionId,
+      )
       this.sessions.set(input.session.sessionId, {
-        session: input.session,
-        connection: input.connection,
+        session: { ...input.session },
+        connection: { ...input.connection },
       })
       this.connectionToSession.set(
         input.connection.connectionId,
@@ -39,7 +43,11 @@ export class InMemorySessionLifecycleRepository implements SessionLifecycleRepos
       return { kind: 'language_conflict' }
     }
 
-    stored.connection = input.connection
+    this.releaseConnectionFromPriorSession(
+      input.connection.connectionId,
+      input.session.sessionId,
+    )
+    stored.connection = { ...input.connection }
     this.connectionToSession.set(
       input.connection.connectionId,
       input.session.sessionId,
@@ -66,5 +74,20 @@ export class InMemorySessionLifecycleRepository implements SessionLifecycleRepos
 
     stored.connection = undefined
     return { kind: 'detached' }
+  }
+
+  private releaseConnectionFromPriorSession(
+    connectionId: string,
+    nextSessionId: string,
+  ): void {
+    const priorSessionId = this.connectionToSession.get(connectionId)
+    if (priorSessionId === undefined || priorSessionId === nextSessionId) {
+      return
+    }
+
+    const priorStored = this.sessions.get(priorSessionId)
+    if (priorStored?.connection?.connectionId === connectionId) {
+      priorStored.connection = undefined
+    }
   }
 }

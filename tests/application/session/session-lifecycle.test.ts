@@ -116,4 +116,46 @@ describe('session lifecycle', () => {
     ).resolves.toEqual({ kind: 'not_found' })
     expect(repository.sessions.has('s-123')).toBe(true)
   })
+
+  it('transfers one connection between sessions before disconnecting it', async () => {
+    const repository = new InMemorySessionLifecycleRepository()
+    const startSession = createStartSession({
+      repository,
+      nowMs: () => 1_750_000_000_123,
+      sessionRetentionSeconds: 86_400,
+    })
+    const disconnectSession = createDisconnectSession({ repository })
+    const connection = {
+      connectionId: 'connection-1',
+      callbackEndpoint: 'https://api.example.com/dev',
+    }
+
+    await expect(
+      startSession({
+        sessionId: 's-1',
+        sourceLanguage: 'ja',
+        targetLanguage: 'vi',
+        connection,
+      }),
+    ).resolves.toEqual({ kind: 'started', sessionId: 's-1' })
+    await expect(
+      startSession({
+        sessionId: 's-2',
+        sourceLanguage: 'en',
+        targetLanguage: 'vi',
+        connection,
+      }),
+    ).resolves.toEqual({ kind: 'started', sessionId: 's-2' })
+
+    expect(repository.sessions.get('s-1')?.connection).toBeUndefined()
+    expect(repository.sessions.get('s-2')?.connection).toEqual(connection)
+    expect(repository.connectionToSession.get('connection-1')).toBe('s-2')
+
+    await expect(
+      disconnectSession({ connectionId: 'connection-1' }),
+    ).resolves.toEqual({ kind: 'detached' })
+    expect(repository.sessions.get('s-2')?.connection).toBeUndefined()
+    expect(repository.sessions.has('s-1')).toBe(true)
+    expect(repository.sessions.has('s-2')).toBe(true)
+  })
 })
