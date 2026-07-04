@@ -5,6 +5,10 @@ import type {
   AcceptTranscriptRevisionResult,
   GetSegmentResult,
   GetSessionResult,
+  MarkRefinementQueuedResult,
+  SaveDraftResult,
+  SaveRefinedResult,
+  SessionRevisionReference,
   SessionStateRepository,
   TranscriptRevisionInput,
 } from '../../../ports'
@@ -19,13 +23,28 @@ import {
   persistenceFailure,
   rejectedError,
 } from './errors'
-import { segmentFromItem, sessionFromItem } from './items'
+import { SegmentItemSchema, segmentFromItem, sessionFromItem } from './items'
 import { segmentKey } from './keys'
 
 const ACCEPT_CONDITION =
   'attribute_not_exists(#PK) OR (#entityType = :segmentType AND #segmentId = :segmentId AND #revision < :revision)'
 const ACCEPT_UPDATE =
   'SET #entityType = :segmentType, #sessionId = :sessionId, #segmentId = :segmentId, #sequence = :sequence, #revision = :revision, #sourceText = :sourceText, #isFinal = :isFinal, #startMs = :startMs, #endMs = :endMs, #expiresAt = :expiresAt REMOVE #draftText, #refinedText, #refinementStatus'
+const CURRENT_DRAFT_CONDITION =
+  '#entityType = :segmentType AND #segmentId = :segmentId AND #revision = :revision AND #isFinal = :isFinal AND attribute_not_exists(#draftText)'
+const PENDING_CONDITION =
+  '#entityType = :segmentType AND #segmentId = :segmentId AND #revision = :revision AND #isFinal = :true AND attribute_exists(#draftText) AND #refinementStatus = :pending'
+const REFINABLE_CONDITION =
+  '#entityType = :segmentType AND #segmentId = :segmentId AND #revision = :revision AND #isFinal = :true AND attribute_exists(#draftText) AND attribute_not_exists(#refinedText) AND (#refinementStatus = :pending OR #refinementStatus = :queued)'
+const STATE_NAMES = {
+  '#entityType': 'entityType',
+  '#segmentId': 'segmentId',
+  '#revision': 'revision',
+  '#isFinal': 'isFinal',
+  '#draftText': 'draftText',
+  '#refinedText': 'refinedText',
+  '#refinementStatus': 'refinementStatus',
+}
 
 function sameSource(
   item: ReturnType<typeof segmentFromItem>,
@@ -41,12 +60,9 @@ function sameSource(
   )
 }
 
-export function createTranscriptOperations(
+export function createSegmentOperations(
   dependencies: RepositoryDependencies,
-): Pick<
-  SessionStateRepository,
-  'getSession' | 'acceptTranscriptRevision' | 'getSegment'
-> {
+): Omit<SessionStateRepository, 'getPreviousFinalSegments'> {
   async function getSession(
     sessionId: Parameters<SessionStateRepository['getSession']>[0],
   ): Promise<GetSessionResult> {
@@ -177,9 +193,213 @@ export function createTranscriptOperations(
     }
   }
 
+  async function classifyCurrent(reference: SessionRevisionReference) {
+    const current = await getSegment(reference)
+    if (current.kind !== 'found') {
+      return current
+    }
+    if (
+      current.segment.segmentId !== reference.segmentId ||
+      current.segment.revision !== reference.revision
+    ) {
+      return {
+        kind: 'not_current' as const,
+        attemptedRevision: reference.revision,
+        currentRevision: current.segment.revision,
+      }
+    }
+    return current
+  }
+
+  async function saveDraft(input: {
+    reference: SessionRevisionReference
+    isFinal: boolean
+    draftText: string
+  }): Promise<SaveDraftResult> {
+    const { reference } = input
+    try {
+      const output = await dependencies.client.send(
+        new UpdateCommand({
+          TableName: dependencies.tableName,
+          Key: segmentKey(reference.sessionId, reference.sequence),
+          UpdateExpression: input.isFinal
+            ? 'SET #draftText = :draftText, #refinementStatus = :pending'
+            : 'SET #draftText = :draftText',
+          ConditionExpression: CURRENT_DRAFT_CONDITION,
+          ExpressionAttributeNames: {
+            '#entityType': 'entityType',
+            '#segmentId': 'segmentId',
+            '#revision': 'revision',
+            '#isFinal': 'isFinal',
+            '#draftText': 'draftText',
+            ...(input.isFinal
+              ? { '#refinementStatus': 'refinementStatus' }
+              : {}),
+          },
+          ExpressionAttributeValues: {
+            ':segmentType': 'SEGMENT',
+            ':segmentId': reference.segmentId,
+            ':revision': reference.revision,
+            ':isFinal': input.isFinal,
+            ':draftText': input.draftText,
+            ...(input.isFinal ? { ':pending': 'PENDING' } : {}),
+          },
+          ReturnValues: 'ALL_NEW',
+        }),
+      )
+      const parsed = SegmentItemSchema.safeParse(output.Attributes)
+      return parsed.success
+        ? { kind: 'stored', segment: segmentFromItem(parsed.data) }
+        : { kind: 'failed', error: invalidPersistedState() }
+    } catch (error) {
+      if (!isConditionalFailure(error)) {
+        return { kind: 'failed', error: persistenceFailure() }
+      }
+      const current = await classifyCurrent(reference)
+      if (current.kind === 'failed') return current
+      if (current.kind === 'not_current') return current
+      if (current.kind === 'not_found') {
+        return {
+          kind: 'not_current',
+          attemptedRevision: reference.revision,
+        }
+      }
+      if (
+        current.segment.isFinal === input.isFinal &&
+        current.segment.draftText !== undefined
+      ) {
+        return { kind: 'already_stored', segment: current.segment }
+      }
+      return {
+        kind: 'not_current',
+        attemptedRevision: reference.revision,
+        currentRevision: current.segment.revision,
+      }
+    }
+  }
+
+  async function markRefinementQueued(
+    reference: SessionRevisionReference,
+  ): Promise<MarkRefinementQueuedResult> {
+    try {
+      await dependencies.client.send(
+        new UpdateCommand({
+          TableName: dependencies.tableName,
+          Key: segmentKey(reference.sessionId, reference.sequence),
+          UpdateExpression: 'SET #refinementStatus = :queued',
+          ConditionExpression: PENDING_CONDITION,
+          ExpressionAttributeNames: {
+            '#entityType': 'entityType',
+            '#segmentId': 'segmentId',
+            '#revision': 'revision',
+            '#isFinal': 'isFinal',
+            '#draftText': 'draftText',
+            '#refinementStatus': 'refinementStatus',
+          },
+          ExpressionAttributeValues: {
+            ':segmentType': 'SEGMENT',
+            ':segmentId': reference.segmentId,
+            ':revision': reference.revision,
+            ':true': true,
+            ':pending': 'PENDING',
+            ':queued': 'QUEUED',
+          },
+        }),
+      )
+      return { kind: 'queued' }
+    } catch (error) {
+      if (!isConditionalFailure(error)) {
+        return { kind: 'failed', error: persistenceFailure() }
+      }
+      const current = await classifyCurrent(reference)
+      if (current.kind === 'failed') return current
+      if (current.kind === 'not_current') return current
+      if (current.kind === 'not_found') {
+        return {
+          kind: 'not_current',
+          attemptedRevision: reference.revision,
+        }
+      }
+      if (current.segment.refinementStatus === 'QUEUED') {
+        return { kind: 'already_queued' }
+      }
+      if (current.segment.refinementStatus === 'COMPLETED') {
+        return { kind: 'already_completed' }
+      }
+      return current.segment.refinementStatus === undefined
+        ? { kind: 'invalid_state' }
+        : {
+            kind: 'invalid_state',
+            status: current.segment.refinementStatus,
+          }
+    }
+  }
+
+  async function saveRefined(input: {
+    reference: SessionRevisionReference
+    refinedText: string
+  }): Promise<SaveRefinedResult> {
+    const { reference } = input
+    try {
+      const output = await dependencies.client.send(
+        new UpdateCommand({
+          TableName: dependencies.tableName,
+          Key: segmentKey(reference.sessionId, reference.sequence),
+          UpdateExpression:
+            'SET #refinedText = :refinedText, #refinementStatus = :completed',
+          ConditionExpression: REFINABLE_CONDITION,
+          ExpressionAttributeNames: STATE_NAMES,
+          ExpressionAttributeValues: {
+            ':segmentType': 'SEGMENT',
+            ':segmentId': reference.segmentId,
+            ':revision': reference.revision,
+            ':true': true,
+            ':pending': 'PENDING',
+            ':queued': 'QUEUED',
+            ':completed': 'COMPLETED',
+            ':refinedText': input.refinedText,
+          },
+          ReturnValues: 'ALL_NEW',
+        }),
+      )
+      const parsed = SegmentItemSchema.safeParse(output.Attributes)
+      return parsed.success
+        ? { kind: 'stored', segment: segmentFromItem(parsed.data) }
+        : { kind: 'failed', error: invalidPersistedState() }
+    } catch (error) {
+      if (!isConditionalFailure(error)) {
+        return { kind: 'failed', error: persistenceFailure() }
+      }
+      const current = await classifyCurrent(reference)
+      if (current.kind === 'failed') return current
+      if (current.kind === 'not_current') return current
+      if (current.kind === 'not_found') {
+        return {
+          kind: 'not_current',
+          attemptedRevision: reference.revision,
+        }
+      }
+      if (
+        current.segment.refinementStatus === 'COMPLETED' &&
+        current.segment.refinedText !== undefined
+      ) {
+        return { kind: 'already_completed', segment: current.segment }
+      }
+      return current.segment.refinementStatus === undefined
+        ? { kind: 'invalid_state' }
+        : {
+            kind: 'invalid_state',
+            status: current.segment.refinementStatus,
+          }
+    }
+  }
+
   return {
     getSession,
     acceptTranscriptRevision,
     getSegment,
+    saveDraft,
+    markRefinementQueued,
+    saveRefined,
   }
 }

@@ -1,7 +1,7 @@
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { describe, expect, it } from 'vitest'
 
-import { createTranscriptOperations } from '../../../../src/adapters/aws/dynamodb/segments'
+import { createSegmentOperations } from '../../../../src/adapters/aws/dynamodb/segments'
 import { sessionItem } from '../../../../src/adapters/aws/dynamodb/items'
 import { OTHER_SEGMENT_ID, SEGMENT_ID, SESSION_ID } from '../../../fixtures/ids'
 import { awsError, scriptedClient } from './scripted-client'
@@ -35,7 +35,7 @@ function operations(...responses: unknown[]) {
   const script = scriptedClient(...responses)
   return {
     script,
-    repository: createTranscriptOperations({
+    repository: createSegmentOperations({
       client: script.client,
       tableName: 'state',
     }),
@@ -145,5 +145,130 @@ describe('DynamoDB transcript revisions', () => {
       error: { code: 'INVALID_INPUT' },
     })
     expect(script.commands).toHaveLength(0)
+  })
+
+  it('stores a final draft and PENDING atomically', async () => {
+    const withDraft = {
+      ...stored,
+      draftText: 'Xin chào',
+      refinementStatus: 'PENDING',
+    }
+    const { script, repository } = operations({ Attributes: withDraft })
+    await expect(
+      repository.saveDraft({
+        reference: revision,
+        isFinal: true,
+        draftText: 'Xin chào',
+      }),
+    ).resolves.toMatchObject({
+      kind: 'stored',
+      segment: { revision: 4, refinementStatus: 'PENDING' },
+    })
+    expect((script.commands[0] as UpdateCommand).input.UpdateExpression).toBe(
+      'SET #draftText = :draftText, #refinementStatus = :pending',
+    )
+  })
+
+  it('does not let a slow old draft become current', async () => {
+    const { repository } = operations(
+      awsError('ConditionalCheckFailedException'),
+      { Item: { ...stored, revision: 5 } },
+    )
+    await expect(
+      repository.saveDraft({
+        reference: revision,
+        isFinal: true,
+        draftText: 'Xin chào',
+      }),
+    ).resolves.toEqual({
+      kind: 'not_current',
+      attemptedRevision: 4,
+      currentRevision: 5,
+    })
+  })
+
+  it('transitions PENDING to QUEUED', async () => {
+    const { repository } = operations({})
+    await expect(repository.markRefinementQueued(revision)).resolves.toEqual({
+      kind: 'queued',
+    })
+  })
+
+  it.each([
+    ['QUEUED', 'already_queued'],
+    ['COMPLETED', 'already_completed'],
+  ] as const)('classifies an existing %s state', async (status, kind) => {
+    const { repository } = operations(
+      awsError('ConditionalCheckFailedException'),
+      {
+        Item: {
+          ...stored,
+          draftText: 'Xin chào',
+          refinementStatus: status,
+          ...(status === 'COMPLETED' ? { refinedText: 'Xin chào.' } : {}),
+        },
+      },
+    )
+    await expect(repository.markRefinementQueued(revision)).resolves.toEqual({
+      kind,
+    })
+  })
+
+  it('allows PENDING to complete when SQS delivery wins the mark race', async () => {
+    const completed = {
+      ...stored,
+      draftText: 'Xin chào',
+      refinedText: 'Xin chào.',
+      refinementStatus: 'COMPLETED',
+    }
+    const { repository } = operations({ Attributes: completed })
+    await expect(
+      repository.saveRefined({
+        reference: revision,
+        refinedText: 'Xin chào.',
+      }),
+    ).resolves.toMatchObject({
+      kind: 'stored',
+      segment: { refinementStatus: 'COMPLETED' },
+    })
+  })
+
+  it('classifies a losing refined writer as already completed', async () => {
+    const completed = {
+      ...stored,
+      draftText: 'Xin chào',
+      refinedText: 'Xin chào.',
+      refinementStatus: 'COMPLETED',
+    }
+    const { repository } = operations(
+      awsError('ConditionalCheckFailedException'),
+      { Item: completed },
+    )
+    await expect(
+      repository.saveRefined({
+        reference: revision,
+        refinedText: 'Xin chào khác',
+      }),
+    ).resolves.toMatchObject({
+      kind: 'already_completed',
+      segment: { refinedText: 'Xin chào.' },
+    })
+  })
+
+  it('does not let a slow old refined result become current', async () => {
+    const { repository } = operations(
+      awsError('ConditionalCheckFailedException'),
+      { Item: { ...stored, revision: 5 } },
+    )
+    await expect(
+      repository.saveRefined({
+        reference: revision,
+        refinedText: 'Xin chào.',
+      }),
+    ).resolves.toEqual({
+      kind: 'not_current',
+      attemptedRevision: 4,
+      currentRevision: 5,
+    })
   })
 })
