@@ -1,9 +1,7 @@
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 
 type ScriptStep =
-  | unknown
-  | Error
-  | ((command: unknown) => unknown | Promise<unknown>)
+  unknown | Error | ((command: unknown) => unknown | Promise<unknown>)
 
 export function scriptedClient(...steps: ScriptStep[]) {
   const commands: unknown[] = []

@@ -16,9 +16,7 @@ export interface RepositoryDependencies {
 }
 
 export type ReadItemResult<T> =
-  | { kind: 'found'; item: T }
-  | { kind: 'not_found' }
-  | { kind: 'invalid' }
+  { kind: 'found'; item: T } | { kind: 'not_found' } | { kind: 'invalid' }
 
 async function readItem<T>(
   dependencies: RepositoryDependencies,
