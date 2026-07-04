@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { RefinementStatusSchema, SegmentSchema } from '../../src/domain/segment'
+import { SEGMENT_ID, SESSION_ID } from '../fixtures/ids'
 
 const validSegment = {
-  sessionId: 's-123',
-  segmentId: 'seg-10',
+  sessionId: SESSION_ID,
+  segmentId: SEGMENT_ID,
   sequence: 10,
   revision: 3,
   sourceText: 'こんにちは',
@@ -74,7 +75,7 @@ describe('SegmentSchema', () => {
     expect(() =>
       SegmentSchema.parse({
         ...validSegment,
-        PK: 'SESSION#s-123',
+        PK: `SESSION#${SESSION_ID}`,
       }),
     ).toThrow()
   })

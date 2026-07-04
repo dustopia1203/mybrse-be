@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { SessionSchema } from '../../src/domain/session'
+import { SESSION_ID } from '../fixtures/ids'
 
 const validSession = {
-  sessionId: 's-123',
+  sessionId: SESSION_ID,
   sourceLanguage: 'ja',
   targetLanguage: 'vi',
   createdAtMs: 1_750_000_000_000,
@@ -19,7 +20,7 @@ describe('SessionSchema', () => {
     expect(
       SessionSchema.parse({
         ...validSession,
-        sessionId: ' s-123 ',
+        sessionId: ` ${SESSION_ID.toUpperCase()} `,
         sourceLanguage: ' ja ',
       }),
     ).toEqual(validSession)

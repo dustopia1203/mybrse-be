@@ -4,9 +4,10 @@ import {
   TranslationContextEntrySchema,
   TranslationContextSchema,
 } from '../../src/domain'
+import { OTHER_SEGMENT_ID, SEGMENT_ID } from '../fixtures/ids'
 
 const draftEntry = {
-  segmentId: 'seg-8',
+  segmentId: SEGMENT_ID,
   sequence: 8,
   sourceText: 'おはよう',
   translatedText: 'Chào buổi sáng',
@@ -14,7 +15,7 @@ const draftEntry = {
 }
 
 const refinedEntry = {
-  segmentId: 'seg-9',
+  segmentId: OTHER_SEGMENT_ID,
   sequence: 9,
   sourceText: 'こんにちは',
   translatedText: 'Xin chào.',

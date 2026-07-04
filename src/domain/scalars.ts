@@ -10,13 +10,15 @@ const NonNegativeSafeIntegerSchema = z
 export const LanguageCodeSchema = TrimmedNonEmptyStringSchema
 export type LanguageCode = z.infer<typeof LanguageCodeSchema>
 
-export const SessionIdSchema = TrimmedNonEmptyStringSchema
+const CanonicalUuidV7Schema = z.string().trim().toLowerCase().pipe(z.uuidv7())
+
+export const SessionIdSchema = CanonicalUuidV7Schema
 export type SessionId = z.infer<typeof SessionIdSchema>
 
-export const SegmentIdSchema = TrimmedNonEmptyStringSchema
+export const SegmentIdSchema = CanonicalUuidV7Schema
 export type SegmentId = z.infer<typeof SegmentIdSchema>
 
-export const SequenceSchema = NonNegativeSafeIntegerSchema
+export const SequenceSchema = z.number().int().nonnegative().max(9_999_999_999)
 export type Sequence = z.infer<typeof SequenceSchema>
 
 export const RevisionSchema = NonNegativeSafeIntegerSchema
