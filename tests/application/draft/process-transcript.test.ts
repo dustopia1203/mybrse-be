@@ -148,7 +148,11 @@ describe('ProcessTranscript', () => {
 
   it.each([
     [
-      { kind: 'not_current' as const, attemptedRevision: 3, currentRevision: 4 },
+      {
+        kind: 'not_current' as const,
+        attemptedRevision: 3,
+        currentRevision: 4,
+      },
       { kind: 'superseded', attemptedRevision: 3, currentRevision: 4 },
     ],
     [
@@ -222,7 +226,11 @@ describe('ProcessTranscript', () => {
     [{ kind: 'already_queued' as const }, 'already_queued'],
     [{ kind: 'already_completed' as const }, 'already_completed'],
     [
-      { kind: 'not_current' as const, attemptedRevision: 4, currentRevision: 5 },
+      {
+        kind: 'not_current' as const,
+        attemptedRevision: 4,
+        currentRevision: 5,
+      },
       'superseded',
     ],
   ])('maps final queue state %#', async (markResult, kind) => {
@@ -322,6 +330,72 @@ describe('ProcessTranscript', () => {
     await createHarness(repository).processTranscript(partialInput)
     expect(callLog).toEqual(['getSession', 'accept', 'publishDraft'])
   })
+
+  it('republishes and enqueues a pending duplicate final', async () => {
+    const repository = new FakeSessionStateRepository(
+      callLog,
+      foundSession,
+      {
+        kind: 'duplicate',
+        segment: segmentOf(finalInput, {
+          draftText: 'Xin chào',
+          refinementStatus: 'PENDING',
+        }),
+      },
+      { kind: 'failed', error: persistenceError },
+    )
+    await expect(
+      createHarness(repository).processTranscript(finalInput),
+    ).resolves.toMatchObject({ kind: 'queued' })
+    expect(callLog).toEqual([
+      'getSession',
+      'accept',
+      'publishDraft',
+      'enqueue',
+      'markQueued',
+    ])
+  })
+
+  it.each([
+    [
+      finalInput,
+      segmentOf(finalInput, { refinementStatus: 'PENDING' }),
+      'draft',
+    ],
+    [
+      partialInput,
+      segmentOf(partialInput, {
+        draftText: 'Xin chào',
+        refinementStatus: 'PENDING',
+      }),
+      'draft',
+    ],
+    [
+      finalInput,
+      segmentOf(finalInput, { draftText: 'Xin chào' }),
+      'refinement_queue',
+    ],
+  ] as const)(
+    'reports inconsistent duplicate state %#',
+    async (processInput, segment, stage) => {
+      const repository = new FakeSessionStateRepository(
+        callLog,
+        foundSession,
+        { kind: 'duplicate', segment },
+        { kind: 'failed', error: persistenceError },
+      )
+      const harness = createHarness(repository)
+      await expect(
+        harness.processTranscript(processInput),
+      ).resolves.toMatchObject({
+        kind: 'failed',
+        error: { code: 'INTERNAL_ERROR' },
+      })
+      expect(harness.publisher.errors[0]?.publication.stage).toBe(stage)
+      expect(harness.translator.inputs).toEqual([])
+      expect(harness.refinementQueue.references).toEqual([])
+    },
+  )
 
   it.each([
     ['QUEUED', 'already_queued'],
