@@ -146,6 +146,51 @@ describe('ProcessTranscript', () => {
     ])
   })
 
+  it.each([
+    [
+      { kind: 'not_current' as const, attemptedRevision: 3, currentRevision: 4 },
+      { kind: 'superseded', attemptedRevision: 3, currentRevision: 4 },
+    ],
+    [
+      {
+        kind: 'already_stored' as const,
+        segment: segmentOf(partialInput, { draftText: 'Khác' }),
+      },
+      { kind: 'superseded', attemptedRevision: 3, currentRevision: 3 },
+    ],
+  ])('does not publish a superseded draft %#', async (saved, expected) => {
+    const repository = new FakeSessionStateRepository(
+      callLog,
+      foundSession,
+      { kind: 'accepted', revision: 3 },
+      saved,
+    )
+    await expect(
+      createHarness(repository).processTranscript(partialInput),
+    ).resolves.toEqual(expected)
+    expect(callLog).not.toContain('publishDraft')
+  })
+
+  it.each([
+    ['provider', error('PROVIDER_UNAVAILABLE')],
+    ['persistence', persistenceError],
+  ])('reports %s failures at the draft stage', async (source, failure) => {
+    const repository = new FakeSessionStateRepository(
+      callLog,
+      foundSession,
+      { kind: 'accepted', revision: 3 },
+      { kind: 'failed', error: persistenceError },
+    )
+    const harness = createHarness(repository)
+    if (source === 'provider')
+      harness.translator.result = { kind: 'failed', error: failure }
+    await expect(harness.processTranscript(partialInput)).resolves.toEqual({
+      kind: 'failed',
+      error: failure,
+    })
+    expect(harness.publisher.errors[0]?.publication.stage).toBe('draft')
+  })
+
   it('publishes, enqueues, and marks a final in order', async () => {
     const repository = new FakeSessionStateRepository(
       callLog,
