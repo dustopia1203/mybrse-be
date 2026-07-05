@@ -443,6 +443,65 @@ describe('ProcessTranscript', () => {
     })
   })
 
+  it.each([
+    {
+      kind: 'rejected' as const,
+      error: {
+        code: 'SEGMENT_CONFLICT' as const,
+        message: 'Sequence belongs to another segment',
+        retryable: false,
+      },
+    },
+    { kind: 'failed' as const, error: persistenceError },
+  ])(
+    'publishes acceptance failures at the draft stage',
+    async (acceptResult) => {
+      const repository = new FakeSessionStateRepository(
+        callLog,
+        foundSession,
+        acceptResult,
+        { kind: 'failed', error: persistenceError },
+      )
+      const harness = createHarness(repository)
+      await expect(harness.processTranscript(partialInput)).resolves.toEqual({
+        kind: 'failed',
+        error: acceptResult.error,
+      })
+      expect(harness.publisher.errors[0]?.publication).toMatchObject({
+        stage: 'draft',
+        error: acceptResult.error,
+      })
+    },
+  )
+
+  it('uses publisher-error precedence for queue error reporting', async () => {
+    const repository = new FakeSessionStateRepository(
+      callLog,
+      foundSession,
+      { kind: 'accepted', revision: 4 },
+      {
+        kind: 'stored',
+        segment: segmentOf(finalInput, {
+          draftText: 'Xin chào',
+          refinementStatus: 'PENDING',
+        }),
+      },
+    )
+    const harness = createHarness(repository)
+    harness.refinementQueue.result = {
+      kind: 'failed',
+      error: error('QUEUE_UNAVAILABLE'),
+    }
+    harness.publisher.errorResult = {
+      kind: 'failed',
+      error: error('PUBLISH_UNAVAILABLE'),
+    }
+    await expect(harness.processTranscript(finalInput)).resolves.toMatchObject({
+      kind: 'failed',
+      error: { code: 'PUBLISH_UNAVAILABLE' },
+    })
+  })
+
   it('does not recursively report draft publication failures', async () => {
     const repository = new FakeSessionStateRepository(
       callLog,
