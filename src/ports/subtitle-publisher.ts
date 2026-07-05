@@ -15,8 +15,7 @@ export interface CorrelatedErrorPublication {
 }
 
 export type PublishResult =
-  | { kind: 'published' }
-  | { kind: 'failed'; error: ApplicationError }
+  { kind: 'published' } | { kind: 'failed'; error: ApplicationError }
 
 export interface SubtitlePublisher {
   publishDraft(
