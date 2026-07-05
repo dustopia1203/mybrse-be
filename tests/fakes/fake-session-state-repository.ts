@@ -16,6 +16,16 @@ export class FakeSessionStateRepository implements SessionStateRepository {
   readonly draftInputs: Parameters<SessionStateRepository['saveDraft']>[0][] =
     []
   readonly queuedReferences: SessionRevisionReference[] = []
+  readonly segmentReferences: SessionRevisionReference[] = []
+  readonly refinedInputs: Parameters<
+    SessionStateRepository['saveRefined']
+  >[0][] = []
+  readonly contextInputs: Parameters<
+    SessionStateRepository['getPreviousFinalSegments']
+  >[0][] = []
+  getSegmentResult?: GetSegmentResult
+  saveRefinedResult?: SaveRefinedResult
+  getContextResult?: GetPreviousFinalSegmentsResult
   constructor(
     private readonly callLog: string[],
     public getSessionResult: GetSessionResult,
@@ -48,13 +58,33 @@ export class FakeSessionStateRepository implements SessionStateRepository {
     this.queuedReferences.push(reference)
     return this.markQueuedResult
   }
-  async getSegment(): Promise<GetSegmentResult> {
-    throw new Error('ProcessTranscript must not call getSegment')
+  async getSegment(
+    reference: SessionRevisionReference,
+  ): Promise<GetSegmentResult> {
+    this.callLog.push('getSegment')
+    this.segmentReferences.push(reference)
+    if (!this.getSegmentResult)
+      throw new Error('getSegment result was not configured')
+    return this.getSegmentResult
   }
-  async saveRefined(): Promise<SaveRefinedResult> {
-    throw new Error('ProcessTranscript must not call saveRefined')
+  async saveRefined(
+    input: Parameters<SessionStateRepository['saveRefined']>[0],
+  ): Promise<SaveRefinedResult> {
+    this.callLog.push('saveRefined')
+    this.refinedInputs.push(input)
+    if (!this.saveRefinedResult)
+      throw new Error('saveRefined result was not configured')
+    return this.saveRefinedResult
   }
-  async getPreviousFinalSegments(): Promise<GetPreviousFinalSegmentsResult> {
-    throw new Error('ProcessTranscript must not query refinement context')
+  async getPreviousFinalSegments(
+    input: Parameters<
+      SessionStateRepository['getPreviousFinalSegments']
+    >[0],
+  ): Promise<GetPreviousFinalSegmentsResult> {
+    this.callLog.push('getContext')
+    this.contextInputs.push(input)
+    if (!this.getContextResult)
+      throw new Error('context result was not configured')
+    return this.getContextResult
   }
 }
