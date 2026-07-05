@@ -1,1 +1,1 @@
-export {}
+export * from './process-transcript'
