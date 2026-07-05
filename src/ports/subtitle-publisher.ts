@@ -8,6 +8,11 @@ export interface DraftPublication {
   isFinal: boolean
 }
 
+export interface RefinedPublication {
+  reference: SessionRevisionReference
+  text: string
+}
+
 export interface CorrelatedErrorPublication {
   stage: 'draft' | 'refinement_queue'
   reference: SessionRevisionReference
@@ -25,5 +30,9 @@ export interface SubtitlePublisher {
   publishError(
     connection: SessionConnection,
     publication: CorrelatedErrorPublication,
+  ): Promise<PublishResult>
+  publishRefined(
+    connection: SessionConnection,
+    publication: RefinedPublication,
   ): Promise<PublishResult>
 }

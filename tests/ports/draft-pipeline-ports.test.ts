@@ -26,6 +26,9 @@ describe('draft pipeline ports', () => {
       async publishError() {
         return { kind: 'published' }
       },
+      async publishRefined() {
+        return { kind: 'published' }
+      },
     }
     const reference = {
       sessionId: SESSION_ID,
