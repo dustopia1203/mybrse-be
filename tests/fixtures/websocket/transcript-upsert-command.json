@@ -1,0 +1,11 @@
+{
+  "action": "transcript.upsert",
+  "sessionId": "0192f3a0-7b5c-7c8d-8e9f-0123456789ab",
+  "segmentId": "0192f3a0-7b5e-7abc-9def-0123456789ab",
+  "sequence": 10,
+  "revision": 3,
+  "text": "こんにちは",
+  "isFinal": false,
+  "startMs": 1200,
+  "endMs": 2400
+}
