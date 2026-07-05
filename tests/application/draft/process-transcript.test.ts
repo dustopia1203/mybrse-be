@@ -218,6 +218,58 @@ describe('ProcessTranscript', () => {
     ])
   })
 
+  it.each([
+    [{ kind: 'already_queued' as const }, 'already_queued'],
+    [{ kind: 'already_completed' as const }, 'already_completed'],
+    [
+      { kind: 'not_current' as const, attemptedRevision: 4, currentRevision: 5 },
+      'superseded',
+    ],
+  ])('maps final queue state %#', async (markResult, kind) => {
+    const repository = new FakeSessionStateRepository(
+      callLog,
+      foundSession,
+      { kind: 'accepted', revision: 4 },
+      {
+        kind: 'stored',
+        segment: segmentOf(finalInput, {
+          draftText: 'Xin chào',
+          refinementStatus: 'PENDING',
+        }),
+      },
+      markResult,
+    )
+    await expect(
+      createHarness(repository).processTranscript(finalInput),
+    ).resolves.toMatchObject({ kind })
+  })
+
+  it.each([
+    { kind: 'failed' as const, error: persistenceError },
+    { kind: 'invalid_state' as const },
+  ])('reports final queue-state failures %#', async (markResult) => {
+    const repository = new FakeSessionStateRepository(
+      callLog,
+      foundSession,
+      { kind: 'accepted', revision: 4 },
+      {
+        kind: 'stored',
+        segment: segmentOf(finalInput, {
+          draftText: 'Xin chào',
+          refinementStatus: 'PENDING',
+        }),
+      },
+      markResult,
+    )
+    const harness = createHarness(repository)
+    await expect(harness.processTranscript(finalInput)).resolves.toMatchObject({
+      kind: 'queue_pending',
+    })
+    expect(harness.publisher.errors[0]?.publication.stage).toBe(
+      'refinement_queue',
+    )
+  })
+
   it('leaves a failed enqueue pending and reports it', async () => {
     const repository = new FakeSessionStateRepository(
       callLog,
