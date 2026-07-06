@@ -37,23 +37,26 @@ describe('outbound event mapping', () => {
   it.each([
     ['draft', DraftTranslationErrorEventSchema],
     ['refinement_queue', RefinementQueueTranslationErrorEventSchema],
-  ] as const)('maps %s errors without the internal message', (stage, schema) => {
-    const event = toErrorEvent({
-      stage,
-      reference,
-      error: {
+  ] as const)(
+    'maps %s errors without the internal message',
+    (stage, schema) => {
+      const event = toErrorEvent({
+        stage,
+        reference,
+        error: {
+          code: 'PROVIDER_UNAVAILABLE',
+          message: 'must not cross the boundary',
+          retryable: true,
+        },
+      })
+      expect(schema.parse(event)).toMatchObject({
+        type: 'translation.error',
+        stage,
         code: 'PROVIDER_UNAVAILABLE',
-        message: 'must not cross the boundary',
         retryable: true,
-      },
-    })
-    expect(schema.parse(event)).toMatchObject({
-      type: 'translation.error',
-      stage,
-      code: 'PROVIDER_UNAVAILABLE',
-      retryable: true,
-    })
-    expect(event).not.toHaveProperty('message')
-    expect(event).not.toHaveProperty('sequence')
-  })
+      })
+      expect(event).not.toHaveProperty('message')
+      expect(event).not.toHaveProperty('sequence')
+    },
+  )
 })

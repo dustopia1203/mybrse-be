@@ -26,9 +26,7 @@ import {
 } from './outbound-event-mapping'
 
 export interface ApiGatewayCommandSender {
-  send(
-    command: PostToConnectionCommand,
-  ): Promise<PostToConnectionCommandOutput>
+  send(command: PostToConnectionCommand): Promise<PostToConnectionCommandOutput>
 }
 
 export type ApiGatewayClientResolver = (
