@@ -59,6 +59,19 @@ describe('BackendConfigSchema', () => {
     expect(() => BackendConfigSchema.parse(rawConfig)).toThrow()
   })
 
+  it.each([
+    [
+      'an unknown draft provider',
+      { ...requiredConfig, draftProvider: 'other-translator' },
+    ],
+    [
+      'an unknown refiner provider',
+      { ...requiredConfig, refinerProvider: 'other-refiner' },
+    ],
+  ])('rejects %s', (_description, rawConfig) => {
+    expect(() => BackendConfigSchema.parse(rawConfig)).toThrow()
+  })
+
   it('rejects raw environment keys', () => {
     expect(() =>
       BackendConfigSchema.parse({
