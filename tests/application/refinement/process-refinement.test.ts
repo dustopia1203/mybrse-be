@@ -209,4 +209,94 @@ describe('ProcessRefinement', () => {
     })
     expect(harness.refiner.inputs[0]?.context).toEqual([])
   })
+
+  it('republishes an initially completed canonical result without provider work', async () => {
+    const harness = createHarness(undefined, {
+      kind: 'found',
+      segment: segment({
+        refinedText: 'Xin chào.',
+        refinementStatus: 'COMPLETED',
+      }),
+    })
+
+    await expect(harness.processRefinement(reference)).resolves.toEqual({
+      kind: 'acknowledged',
+      reason: 'already_completed',
+      reference,
+    })
+    expect(callLog).toEqual([
+      'getSession',
+      'getSegment',
+      'publishRefined',
+    ])
+    expect(harness.publisher.refined[0]?.publication.text).toBe('Xin chào.')
+  })
+
+  it('acknowledges the concurrent losing writer without publishing', async () => {
+    const harness = createHarness()
+    harness.repository.saveRefinedResult = {
+      kind: 'already_completed',
+      segment: segment({
+        refinedText: 'Canonical winner.',
+        refinementStatus: 'COMPLETED',
+      }),
+    }
+
+    await expect(harness.processRefinement(reference)).resolves.toEqual({
+      kind: 'acknowledged',
+      reason: 'already_completed',
+      reference,
+    })
+    expect(callLog).toEqual([
+      'getSession',
+      'getSegment',
+      'getContext',
+      'refine',
+      'saveRefined',
+    ])
+    expect(harness.publisher.refined).toEqual([])
+  })
+
+  it('acknowledges a result superseded during refinement', async () => {
+    const harness = createHarness()
+    harness.repository.saveRefinedResult = {
+      kind: 'not_current',
+      attemptedRevision: 4,
+      currentRevision: 5,
+    }
+
+    await expect(harness.processRefinement(reference)).resolves.toEqual({
+      kind: 'acknowledged',
+      reason: 'stale',
+      reference,
+    })
+    expect(harness.publisher.refined).toEqual([])
+  })
+
+  it('retries canonical publication after the stored result is completed', async () => {
+    const harness = createHarness(undefined, {
+      kind: 'found',
+      segment: segment({
+        refinedText: 'Xin chào.',
+        refinementStatus: 'COMPLETED',
+      }),
+    })
+    harness.publisher.refinedResult = {
+      kind: 'failed',
+      error: error('PUBLISH_UNAVAILABLE'),
+    }
+
+    await expect(harness.processRefinement(reference)).resolves.toMatchObject({
+      kind: 'failed',
+      disposition: 'retry',
+    })
+
+    harness.publisher.refinedResult = { kind: 'published' }
+    await expect(harness.processRefinement(reference)).resolves.toEqual({
+      kind: 'acknowledged',
+      reason: 'already_completed',
+      reference,
+    })
+    expect(harness.refiner.inputs).toEqual([])
+  })
 })

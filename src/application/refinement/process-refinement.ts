@@ -3,6 +3,7 @@ import {
   type ApplicationError,
 } from '../../domain'
 import type {
+  SessionConnection,
   SessionRevisionReference,
   SessionStateRepository,
   SubtitlePublisher,
@@ -59,6 +60,27 @@ const internalError = (message: string): ApplicationError => ({
   retryable: APPLICATION_ERROR_RETRYABILITY.INTERNAL_ERROR,
 })
 
+const publishCanonical = async (input: {
+  dependencies: ProcessRefinementDependencies
+  reference: SessionRevisionReference
+  connection: SessionConnection
+  text: string
+  completedAtStart: boolean
+}): Promise<ProcessRefinementResult> => {
+  const published = await input.dependencies.publisher.publishRefined(
+    input.connection,
+    { reference: input.reference, text: input.text },
+  )
+  if (published.kind === 'failed') {
+    if (published.error.code === 'CONNECTION_GONE')
+      return acknowledged(input.reference, 'connection_gone')
+    return failed(input.reference, published.error)
+  }
+  return input.completedAtStart
+    ? acknowledged(input.reference, 'already_completed')
+    : { kind: 'completed', reference: input.reference }
+}
+
 export const createProcessRefinement =
   (dependencies: ProcessRefinementDependencies) =>
   async (
@@ -87,6 +109,24 @@ export const createProcessRefinement =
       return acknowledged(reference, 'stale')
 
     const segment = segmentResult.segment
+    if (segment.refinementStatus === 'COMPLETED') {
+      if (
+        segment.draftText === undefined ||
+        segment.refinedText === undefined ||
+        !segment.isFinal
+      )
+        return failed(
+          reference,
+          internalError('Completed segment has invalid refinement state'),
+        )
+      return publishCanonical({
+        dependencies,
+        reference,
+        connection: sessionResult.value.connection,
+        text: segment.refinedText,
+        completedAtStart: true,
+      })
+    }
     if (
       !segment.isFinal ||
       segment.draftText === undefined ||
@@ -121,21 +161,27 @@ export const createProcessRefinement =
       reference,
       refinedText: refined.text,
     })
-    if (saved.kind !== 'stored')
+    if (saved.kind === 'already_completed')
+      return acknowledged(reference, 'already_completed')
+    if (saved.kind === 'not_current')
+      return acknowledged(reference, 'stale')
+    if (saved.kind === 'invalid_state')
       return failed(
         reference,
-        internalError('Refined result was not stored by the current worker'),
+        internalError('Conditional refined save found invalid state'),
       )
+    if (saved.kind === 'failed') return failed(reference, saved.error)
     if (saved.segment.refinedText === undefined)
       return failed(
         reference,
         internalError('Stored refined result has no refined text'),
       )
 
-    const published = await dependencies.publisher.publishRefined(
-      sessionResult.value.connection,
-      { reference, text: saved.segment.refinedText },
-    )
-    if (published.kind === 'failed') return failed(reference, published.error)
-    return { kind: 'completed', reference }
+    return publishCanonical({
+      dependencies,
+      reference,
+      connection: sessionResult.value.connection,
+      text: saved.segment.refinedText,
+      completedAtStart: false,
+    })
   }
