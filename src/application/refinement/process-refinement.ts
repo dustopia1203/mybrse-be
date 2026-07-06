@@ -127,16 +127,28 @@ export const createProcessRefinement =
         completedAtStart: true,
       })
     }
+    if (!segment.isFinal)
+      return failed(
+        reference,
+        internalError('Refinement job references a current partial segment'),
+      )
+    if (segment.draftText === undefined)
+      return failed(
+        reference,
+        internalError('Current final segment has no draft text'),
+      )
+    if (segment.refinedText !== undefined)
+      return failed(
+        reference,
+        internalError('Incomplete refinement state contains refined text'),
+      )
     if (
-      !segment.isFinal ||
-      segment.draftText === undefined ||
-      segment.refinedText !== undefined ||
-      (segment.refinementStatus !== 'PENDING' &&
-        segment.refinementStatus !== 'QUEUED')
+      segment.refinementStatus !== 'PENDING' &&
+      segment.refinementStatus !== 'QUEUED'
     )
       return failed(
         reference,
-        internalError('Current final segment has invalid refinement state'),
+        internalError('Current final segment has invalid refinement status'),
       )
 
     const contextResult =

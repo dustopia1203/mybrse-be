@@ -299,4 +299,123 @@ describe('ProcessRefinement', () => {
     })
     expect(harness.refiner.inputs).toEqual([])
   })
+
+  it.each([
+    ['session', error('PERSISTENCE_UNAVAILABLE')],
+    ['segment', error('PERSISTENCE_UNAVAILABLE')],
+    ['context', error('PERSISTENCE_UNAVAILABLE')],
+    ['refiner', error('PROVIDER_UNAVAILABLE')],
+    ['save', error('PERSISTENCE_UNAVAILABLE')],
+    ['publish', error('PUBLISH_UNAVAILABLE')],
+  ] as const)(
+    'returns retry disposition for %s failure',
+    async (stage, failure) => {
+      const harness = createHarness()
+      if (stage === 'session')
+        harness.repository.getSessionResult = {
+          kind: 'failed',
+          error: failure,
+        }
+      if (stage === 'segment')
+        harness.repository.getSegmentResult = {
+          kind: 'failed',
+          error: failure,
+        }
+      if (stage === 'context')
+        harness.repository.getContextResult = {
+          kind: 'failed',
+          error: failure,
+        }
+      if (stage === 'refiner')
+        harness.refiner.result = { kind: 'failed', error: failure }
+      if (stage === 'save')
+        harness.repository.saveRefinedResult = {
+          kind: 'failed',
+          error: failure,
+        }
+      if (stage === 'publish')
+        harness.publisher.refinedResult = {
+          kind: 'failed',
+          error: failure,
+        }
+
+      await expect(harness.processRefinement(reference)).resolves.toEqual({
+        kind: 'failed',
+        disposition: 'retry',
+        reference,
+        error: failure,
+      })
+    },
+  )
+
+  it('acknowledges a closed connection reported by publication', async () => {
+    const harness = createHarness()
+    harness.publisher.refinedResult = {
+      kind: 'failed',
+      error: error('CONNECTION_GONE'),
+    }
+
+    await expect(harness.processRefinement(reference)).resolves.toEqual({
+      kind: 'acknowledged',
+      reason: 'connection_gone',
+      reference,
+    })
+  })
+
+  it('retries a permanent provider rejection so the job reaches the DLQ', async () => {
+    const harness = createHarness()
+    const rejected = error('PROVIDER_REJECTED')
+    harness.refiner.result = { kind: 'failed', error: rejected }
+
+    await expect(harness.processRefinement(reference)).resolves.toEqual({
+      kind: 'failed',
+      disposition: 'retry',
+      reference,
+      error: rejected,
+    })
+  })
+
+  it.each([
+    segment({ isFinal: false }),
+    segment({ draftText: undefined }),
+    segment({ refinementStatus: undefined }),
+    segment({ refinedText: 'Unexpected.' }),
+    segment({
+      refinementStatus: 'COMPLETED',
+      refinedText: undefined,
+    }),
+  ])('retries impossible current state %#', async (current) => {
+    const harness = createHarness(undefined, {
+      kind: 'found',
+      segment: current,
+    })
+
+    await expect(harness.processRefinement(reference)).resolves.toMatchObject({
+      kind: 'failed',
+      disposition: 'retry',
+      reference,
+      error: { code: 'INTERNAL_ERROR' },
+    })
+    expect(callLog).toEqual(['getSession', 'getSegment'])
+  })
+
+  it('retries a rejected context query so the job reaches the DLQ', async () => {
+    const harness = createHarness()
+    const rejected: ApplicationError = {
+      code: 'INVALID_INPUT',
+      message: 'Invalid context limit',
+      retryable: false,
+    }
+    harness.repository.getContextResult = {
+      kind: 'rejected',
+      error: rejected,
+    }
+
+    await expect(harness.processRefinement(reference)).resolves.toEqual({
+      kind: 'failed',
+      disposition: 'retry',
+      reference,
+      error: rejected,
+    })
+  })
 })
