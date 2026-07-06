@@ -14,11 +14,7 @@ import type {
 import { FakeSessionStateRepository } from '../../fakes/fake-session-state-repository'
 import { FakeSubtitlePublisher } from '../../fakes/fake-subtitle-publisher'
 import { FakeTranslationRefiner } from '../../fakes/fake-translation-refiner'
-import {
-  OTHER_SEGMENT_ID,
-  SEGMENT_ID,
-  SESSION_ID,
-} from '../../fixtures/ids'
+import { OTHER_SEGMENT_ID, SEGMENT_ID, SESSION_ID } from '../../fixtures/ids'
 
 const callLog: string[] = []
 const reference = {
@@ -112,10 +108,7 @@ beforeEach(() => {
 describe('ProcessRefinement', () => {
   it.each([
     [{ kind: 'not_found' as const }, 'not_found'],
-    [
-      { kind: 'found' as const, value: { session } },
-      'connection_gone',
-    ],
+    [{ kind: 'found' as const, value: { session } }, 'connection_gone'],
   ])('acknowledges terminal session state %#', async (result, reason) => {
     await expect(
       createHarness(result).processRefinement(reference),
@@ -224,11 +217,7 @@ describe('ProcessRefinement', () => {
       reason: 'already_completed',
       reference,
     })
-    expect(callLog).toEqual([
-      'getSession',
-      'getSegment',
-      'publishRefined',
-    ])
+    expect(callLog).toEqual(['getSession', 'getSegment', 'publishRefined'])
     expect(harness.publisher.refined[0]?.publication.text).toBe('Xin chào.')
   })
 

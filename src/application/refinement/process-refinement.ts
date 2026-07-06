@@ -13,10 +13,7 @@ import type {
 export interface ProcessRefinementInput extends SessionRevisionReference {}
 
 export type RefinementAcknowledgementReason =
-  | 'stale'
-  | 'already_completed'
-  | 'not_found'
-  | 'connection_gone'
+  'stale' | 'already_completed' | 'not_found' | 'connection_gone'
 
 export type ProcessRefinementResult =
   | { kind: 'completed'; reference: SessionRevisionReference }
@@ -175,8 +172,7 @@ export const createProcessRefinement =
     })
     if (saved.kind === 'already_completed')
       return acknowledged(reference, 'already_completed')
-    if (saved.kind === 'not_current')
-      return acknowledged(reference, 'stale')
+    if (saved.kind === 'not_current') return acknowledged(reference, 'stale')
     if (saved.kind === 'invalid_state')
       return failed(
         reference,

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type {
-  SubtitlePublisher,
-  TranslationRefiner,
-} from '../../src/ports'
+import type { SubtitlePublisher, TranslationRefiner } from '../../src/ports'
 import { SEGMENT_ID, SESSION_ID } from '../fixtures/ids'
 
 describe('refinement pipeline ports', () => {

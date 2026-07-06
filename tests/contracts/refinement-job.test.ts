@@ -4,10 +4,7 @@ import { RefinementJobSchema } from '../../src/contracts'
 import { readJsonFixture } from '../fixtures/read-json-fixture'
 
 const job = readJsonFixture('refinement-job.json', 'refinement')
-const invalidJob = readJsonFixture(
-  'invalid-refinement-job.json',
-  'refinement',
-)
+const invalidJob = readJsonFixture('invalid-refinement-job.json', 'refinement')
 
 describe('RefinementJobSchema', () => {
   it('parses the canonical logical job fixture', () => {

@@ -77,9 +77,7 @@ export class FakeSessionStateRepository implements SessionStateRepository {
     return this.saveRefinedResult
   }
   async getPreviousFinalSegments(
-    input: Parameters<
-      SessionStateRepository['getPreviousFinalSegments']
-    >[0],
+    input: Parameters<SessionStateRepository['getPreviousFinalSegments']>[0],
   ): Promise<GetPreviousFinalSegmentsResult> {
     this.callLog.push('getContext')
     this.contextInputs.push(input)
