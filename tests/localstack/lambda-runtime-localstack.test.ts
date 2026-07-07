@@ -36,81 +36,77 @@ describe('LocalStack test harness', () => {
     )
   })
 
-  it(
-    'starts a session through runtime composition against LocalStack DynamoDB',
-    async () => {
-      await waitForLocalStack()
+  it('starts a session through runtime composition against LocalStack DynamoDB', async () => {
+    await waitForLocalStack()
 
-      const awsConfig = localStackAwsConfig()
-      const dynamo = new DynamoDBClient(awsConfig)
-      const sqs = new SQSClient(awsConfig)
-      const tableName = `translation-state-${Date.now()}`
-      const queueName = `refinement-${Date.now()}`
+    const awsConfig = localStackAwsConfig()
+    const dynamo = new DynamoDBClient(awsConfig)
+    const sqs = new SQSClient(awsConfig)
+    const tableName = `translation-state-${Date.now()}`
+    const queueName = `refinement-${Date.now()}`
 
-      const queue = await sqs.send(
-        new CreateQueueCommand({ QueueName: queueName }),
-      )
+    const queue = await sqs.send(
+      new CreateQueueCommand({ QueueName: queueName }),
+    )
 
-      await dynamo.send(
-        new CreateTableCommand({
-          TableName: tableName,
-          BillingMode: 'PAY_PER_REQUEST',
-          AttributeDefinitions: [
-            { AttributeName: 'PK', AttributeType: 'S' },
-            { AttributeName: 'SK', AttributeType: 'S' },
-          ],
-          KeySchema: [
-            { AttributeName: 'PK', KeyType: 'HASH' },
-            { AttributeName: 'SK', KeyType: 'RANGE' },
-          ],
-        }),
-      )
-      await waitUntilTableExists(
-        { client: dynamo, maxWaitTime: 20, minDelay: 1 },
-        { TableName: tableName },
-      )
+    await dynamo.send(
+      new CreateTableCommand({
+        TableName: tableName,
+        BillingMode: 'PAY_PER_REQUEST',
+        AttributeDefinitions: [
+          { AttributeName: 'PK', AttributeType: 'S' },
+          { AttributeName: 'SK', AttributeType: 'S' },
+        ],
+        KeySchema: [
+          { AttributeName: 'PK', KeyType: 'HASH' },
+          { AttributeName: 'SK', KeyType: 'RANGE' },
+        ],
+      }),
+    )
+    await waitUntilTableExists(
+      { client: dynamo, maxWaitTime: 20, minDelay: 1 },
+      { TableName: tableName },
+    )
 
-      try {
-        const runtime = createBackendRuntime(
-          {
-            tableName,
-            refinementQueueUrl: queue.QueueUrl!,
-            contextWindowSize: 5,
-            draftProvider: 'amazon-translate',
-            refinerProvider: 'amazon-bedrock',
-            bedrockModelId: 'provider.model-v1',
-            sessionRetentionSeconds: 86_400,
-          },
-          {
-            nowMs: () => 1_700_000_000_000,
-            createDynamoDbClient: () => dynamo,
-            createSqsClient: () => sqs,
-            createTranslateClient: () => new TranslateClient(awsConfig),
-            createBedrockClient: () => new BedrockRuntimeClient(awsConfig),
-            createApiGatewaySender: () => ({
-              send: async () => ({ $metadata: {} }),
-            }),
-          },
-        )
-
-        await expect(
-          runtime.startSession({
-            sessionId,
-            sourceLanguage: 'ja',
-            targetLanguage: 'vi',
-            connection: {
-              connectionId: 'connection-localstack',
-              callbackEndpoint: 'https://example.com/prod',
-            },
+    try {
+      const runtime = createBackendRuntime(
+        {
+          tableName,
+          refinementQueueUrl: queue.QueueUrl!,
+          contextWindowSize: 5,
+          draftProvider: 'amazon-translate',
+          refinerProvider: 'amazon-bedrock',
+          bedrockModelId: 'provider.model-v1',
+          sessionRetentionSeconds: 86_400,
+        },
+        {
+          nowMs: () => 1_700_000_000_000,
+          createDynamoDbClient: () => dynamo,
+          createSqsClient: () => sqs,
+          createTranslateClient: () => new TranslateClient(awsConfig),
+          createBedrockClient: () => new BedrockRuntimeClient(awsConfig),
+          createApiGatewaySender: () => ({
+            send: async () => ({ $metadata: {} }),
           }),
-        ).resolves.toEqual({ kind: 'started', sessionId })
-      } finally {
-        if (queue.QueueUrl !== undefined) {
-          await sqs.send(new DeleteQueueCommand({ QueueUrl: queue.QueueUrl }))
-        }
-        await dynamo.send(new DeleteTableCommand({ TableName: tableName }))
+        },
+      )
+
+      await expect(
+        runtime.startSession({
+          sessionId,
+          sourceLanguage: 'ja',
+          targetLanguage: 'vi',
+          connection: {
+            connectionId: 'connection-localstack',
+            callbackEndpoint: 'https://example.com/prod',
+          },
+        }),
+      ).resolves.toEqual({ kind: 'started', sessionId })
+    } finally {
+      if (queue.QueueUrl !== undefined) {
+        await sqs.send(new DeleteQueueCommand({ QueueUrl: queue.QueueUrl }))
       }
-    },
-    30_000,
-  )
+      await dynamo.send(new DeleteTableCommand({ TableName: tableName }))
+    }
+  }, 30_000)
 })

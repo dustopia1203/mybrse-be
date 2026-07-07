@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude tests/localstack/**",
     "test:watch": "vitest",
     "test:localstack": "pnpm localstack:up && vitest run tests/localstack",
     "localstack:up": "docker compose -f docker-compose.localstack.yml up -d",

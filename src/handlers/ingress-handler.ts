@@ -27,8 +27,8 @@ export type IngressRuntime = Pick<
 > & {
   controlPublisher: Pick<WebSocketControlPublisher, 'publish'>
 }
-export type IngressRuntimeResolver =
-  () => IngressRuntime | Promise<IngressRuntime>
+export type IngressRuntimeResolver = () =>
+  IngressRuntime | Promise<IngressRuntime>
 
 function commandBody(event: WebSocketRequestEvent): string {
   return typeof event.body === 'string' ? event.body : ''

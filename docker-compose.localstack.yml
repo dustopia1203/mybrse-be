@@ -2,8 +2,8 @@ services:
   localstack:
     image: localstack/localstack:4.11.1
     ports:
-      - "4566:4566"
+      - '4566:4566'
     environment:
       SERVICES: dynamodb,sqs
       AWS_DEFAULT_REGION: us-east-1
-      DEBUG: "0"
+      DEBUG: '0'

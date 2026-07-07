@@ -10,10 +10,11 @@ import { RefinementJobSchema } from '../contracts'
 import { logError, logInfo, logWarn } from './logging'
 
 export type RefineRuntime = Pick<BackendRuntime, 'processRefinement'>
-export type RefineRuntimeResolver =
-  () => RefineRuntime | Promise<RefineRuntime>
+export type RefineRuntimeResolver = () => RefineRuntime | Promise<RefineRuntime>
 
-function parseRecord(record: SQSRecord):
+function parseRecord(
+  record: SQSRecord,
+):
   | { kind: 'parsed'; job: Parameters<RefineRuntime['processRefinement']>[0] }
   | { kind: 'invalid' } {
   try {
@@ -68,9 +69,7 @@ export const createRefineHandler =
           sequence: parsed.job.sequence,
           revision: parsed.job.revision,
           outcome: result.kind,
-          ...(result.kind === 'failed'
-            ? { errorCode: result.error.code }
-            : {}),
+          ...(result.kind === 'failed' ? { errorCode: result.error.code } : {}),
         })
         if (result.kind === 'failed') {
           batchItemFailures.push({ itemIdentifier: record.messageId })

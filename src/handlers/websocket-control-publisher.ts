@@ -21,9 +21,7 @@ import {
 import type { PublishResult, SessionConnection } from '../ports'
 
 export interface WebSocketControlCommandSender {
-  send(
-    command: PostToConnectionCommand,
-  ): Promise<PostToConnectionCommandOutput>
+  send(command: PostToConnectionCommand): Promise<PostToConnectionCommandOutput>
 }
 
 export type WebSocketControlClientResolver = (
@@ -35,7 +33,9 @@ export type WebSocketControlEvent =
   | ContractTranslationErrorEvent
   | SessionTranslationErrorEvent
 
-function parseControlEvent(event: WebSocketControlEvent): WebSocketControlEvent {
+function parseControlEvent(
+  event: WebSocketControlEvent,
+): WebSocketControlEvent {
   if (event.type === 'session.started') {
     return SessionStartedEventSchema.parse(event)
   }

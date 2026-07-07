@@ -43,7 +43,8 @@ export function extractWebSocketContext(
   const requestContext = event.requestContext
   const missingFields: string[] = []
 
-  if (!nonEmpty(requestContext?.connectionId)) missingFields.push('connectionId')
+  if (!nonEmpty(requestContext?.connectionId))
+    missingFields.push('connectionId')
   if (!nonEmpty(requestContext?.domainName)) missingFields.push('domainName')
   if (!nonEmpty(requestContext?.stage)) missingFields.push('stage')
 
