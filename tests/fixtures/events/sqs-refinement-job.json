@@ -1,0 +1,15 @@
+{
+  "Records": [
+    {
+      "messageId": "message-1",
+      "receiptHandle": "receipt-1",
+      "body": "{\"sessionId\":\"0192f3a0-7b5c-7c8d-8e9f-0123456789ab\",\"segmentId\":\"0192f3a0-7b5e-7abc-9def-0123456789ab\",\"sequence\":10,\"revision\":4}",
+      "attributes": {},
+      "messageAttributes": {},
+      "md5OfBody": "md5",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:ap-southeast-1:123456789012:refinement",
+      "awsRegion": "ap-southeast-1"
+    }
+  ]
+}

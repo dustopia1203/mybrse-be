@@ -1,0 +1,15 @@
+{
+  "Records": [
+    {
+      "messageId": "message-invalid",
+      "receiptHandle": "receipt-invalid",
+      "body": "{\"sessionId\":\"bad\",\"sequence\":-1}",
+      "attributes": {},
+      "messageAttributes": {},
+      "md5OfBody": "md5",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:ap-southeast-1:123456789012:refinement",
+      "awsRegion": "ap-southeast-1"
+    }
+  ]
+}

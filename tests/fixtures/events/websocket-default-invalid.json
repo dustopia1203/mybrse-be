@@ -1,0 +1,10 @@
+{
+  "body": "{\"action\":\"unknown.action\"}",
+  "requestContext": {
+    "routeKey": "$default",
+    "connectionId": "connection-1",
+    "domainName": "abc.execute-api.ap-southeast-1.amazonaws.com",
+    "stage": "prod",
+    "requestId": "request-default"
+  }
+}
