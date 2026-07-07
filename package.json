@@ -12,6 +12,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:localstack": "pnpm localstack:up && vitest run tests/localstack",
+    "localstack:up": "docker compose -f docker-compose.localstack.yml up -d",
+    "localstack:down": "docker compose -f docker-compose.localstack.yml down",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm typecheck && pnpm test"
