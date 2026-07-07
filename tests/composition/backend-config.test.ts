@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { BackendConfigSchema } from '../../src/composition/backend-config'
+import {
+  BackendConfigSchema,
+  loadBackendConfig,
+} from '../../src/composition/backend-config'
 
 const requiredConfig = {
   tableName: 'translation-state',
@@ -78,6 +81,49 @@ describe('BackendConfigSchema', () => {
         ...requiredConfig,
         TABLE_NAME: 'translation-state',
       }),
+    ).toThrow()
+  })
+})
+
+describe('loadBackendConfig', () => {
+  const env = {
+    TABLE_NAME: 'translation-state',
+    REFINEMENT_QUEUE_URL:
+      'https://sqs.ap-southeast-1.amazonaws.com/123456789012/refinement',
+    DRAFT_PROVIDER: 'amazon-translate',
+    REFINER_PROVIDER: 'amazon-bedrock',
+    BEDROCK_MODEL_ID: 'provider.model-v1',
+  }
+
+  it('maps environment variables to backend config', () => {
+    expect(loadBackendConfig(env)).toEqual({
+      tableName: 'translation-state',
+      refinementQueueUrl:
+        'https://sqs.ap-southeast-1.amazonaws.com/123456789012/refinement',
+      draftProvider: 'amazon-translate',
+      refinerProvider: 'amazon-bedrock',
+      bedrockModelId: 'provider.model-v1',
+      contextWindowSize: 5,
+      sessionRetentionSeconds: 86_400,
+    })
+  })
+
+  it('parses optional numeric variables', () => {
+    expect(
+      loadBackendConfig({
+        ...env,
+        CONTEXT_WINDOW_SIZE: '8',
+        SESSION_RETENTION_SECONDS: '3600',
+      }),
+    ).toMatchObject({
+      contextWindowSize: 8,
+      sessionRetentionSeconds: 3600,
+    })
+  })
+
+  it('rejects invalid environment values without exposing raw values', () => {
+    expect(() =>
+      loadBackendConfig({ ...env, CONTEXT_WINDOW_SIZE: 'not-a-number' }),
     ).toThrow()
   })
 })
