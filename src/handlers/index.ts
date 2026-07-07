@@ -1,4 +1,5 @@
 export * from './logging'
+export * from './refine-handler'
 export * from './request-context'
 export * from './responses'
 export * from './websocket-control-publisher'
