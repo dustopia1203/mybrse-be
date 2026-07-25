@@ -59,3 +59,137 @@ Resources:
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt RefinementDeadLetterQueue.Arn
         maxReceiveCount: 3
+
+  IngressFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: IngressDataAndProviders
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:TransactWriteItems
+                Resource: !GetAtt TranslationStateTable.Arn
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt RefinementQueue.Arn
+              - Effect: Allow
+                Action: translate:TranslateText
+                Resource: '*'
+
+  RefineFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RefineDataAndProviders
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                Resource: !GetAtt TranslationStateTable.Arn
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt RefinementQueue.Arn
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: '*'
+
+  IngressFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ..
+      Handler: src/handlers/ingress-handler.handler
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      MemorySize: 512
+      Timeout: 20
+      Role: !GetAtt IngressFunctionRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TranslationStateTable
+          REFINEMENT_QUEUE_URL: !Ref RefinementQueue
+          DRAFT_PROVIDER: !Ref DraftProvider
+          REFINER_PROVIDER: !Ref RefinerProvider
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          CONTEXT_WINDOW_SIZE: !Ref ContextWindowSize
+          SESSION_RETENTION_SECONDS: !Ref SessionRetentionSeconds
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/ingress-handler.ts
+        Format: esm
+        Minify: true
+        Sourcemap: false
+        Target: es2024
+
+  RefineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ..
+      Handler: src/handlers/refine-handler.handler
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      MemorySize: 512
+      Timeout: 30
+      Role: !GetAtt RefineFunctionRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TranslationStateTable
+          REFINEMENT_QUEUE_URL: !Ref RefinementQueue
+          DRAFT_PROVIDER: !Ref DraftProvider
+          REFINER_PROVIDER: !Ref RefinerProvider
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          CONTEXT_WINDOW_SIZE: !Ref ContextWindowSize
+          SESSION_RETENTION_SECONDS: !Ref SessionRetentionSeconds
+      Events:
+        RefinementQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt RefinementQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handlers/refine-handler.ts
+        Format: esm
+        Minify: true
+        Sourcemap: false
+        Target: es2024

@@ -18,6 +18,20 @@ type SamResource = {
   Metadata?: Record<string, unknown>
 }
 
+type PolicyStatement = {
+  Effect: string
+  Action: string | string[]
+  Resource: unknown
+}
+
+type InlinePolicy = {
+  PolicyName: string
+  PolicyDocument: {
+    Version: string
+    Statement: PolicyStatement[]
+  }
+}
+
 type SamTemplate = {
   AWSTemplateFormatVersion: string
   Transform: string
@@ -58,6 +72,28 @@ function resource(logicalId: string): SamResource {
   const value = template.Resources[logicalId]
   expect(value, `missing resource ${logicalId}`).toBeDefined()
   return value as SamResource
+}
+
+function statementsFor(roleLogicalId: string): PolicyStatement[] {
+  const policies = resource(roleLogicalId).Properties.Policies as InlinePolicy[]
+  return policies.flatMap((policy) => policy.PolicyDocument.Statement)
+}
+
+function actionsFor(roleLogicalId: string): string[] {
+  return statementsFor(roleLogicalId).flatMap((statement) =>
+    Array.isArray(statement.Action) ? statement.Action : [statement.Action],
+  )
+}
+
+function statementFor(
+  roleLogicalId: string,
+  action: string,
+): PolicyStatement | undefined {
+  return statementsFor(roleLogicalId).find((statement) =>
+    Array.isArray(statement.Action)
+      ? statement.Action.includes(action)
+      : statement.Action === action,
+  )
 }
 
 describe('SAM template foundation', () => {
@@ -127,4 +163,143 @@ describe('state resources', () => {
       },
     })
   })
+})
+
+const expectedEnvironment = {
+  TABLE_NAME: { Ref: 'TranslationStateTable' },
+  REFINEMENT_QUEUE_URL: { Ref: 'RefinementQueue' },
+  DRAFT_PROVIDER: { Ref: 'DraftProvider' },
+  REFINER_PROVIDER: { Ref: 'RefinerProvider' },
+  BEDROCK_MODEL_ID: { Ref: 'BedrockModelId' },
+  CONTEXT_WINDOW_SIZE: { Ref: 'ContextWindowSize' },
+  SESSION_RETENTION_SECONDS: { Ref: 'SessionRetentionSeconds' },
+}
+
+describe('Lambda functions and packaging', () => {
+  it.each([
+    [
+      'IngressFunction',
+      'IngressFunctionRole',
+      'src/handlers/ingress-handler.handler',
+      'src/handlers/ingress-handler.ts',
+      20,
+    ],
+    [
+      'RefineFunction',
+      'RefineFunctionRole',
+      'src/handlers/refine-handler.handler',
+      'src/handlers/refine-handler.ts',
+      30,
+    ],
+  ])(
+    'configures %s for Node.js 24 ESM bundling',
+    (logicalId, roleLogicalId, handler, entryPoint, timeout) => {
+      const lambda = resource(logicalId)
+      expect(lambda.Type).toBe('AWS::Serverless::Function')
+      expect(lambda.Properties).toMatchObject({
+        CodeUri: '..',
+        Handler: handler,
+        Runtime: 'nodejs24.x',
+        Architectures: ['arm64'],
+        MemorySize: 512,
+        Timeout: timeout,
+        Role: { 'Fn::GetAtt': `${roleLogicalId}.Arn` },
+        Environment: { Variables: expectedEnvironment },
+      })
+      expect(lambda.Metadata).toEqual({
+        BuildMethod: 'esbuild',
+        BuildProperties: {
+          EntryPoints: [entryPoint],
+          Format: 'esm',
+          Minify: true,
+          Sourcemap: false,
+          Target: 'es2024',
+        },
+      })
+    },
+  )
+
+  it('maps the refinement queue to one record with partial batch failures', () => {
+    expect(resource('RefineFunction').Properties.Events).toEqual({
+      RefinementQueueEvent: {
+        Type: 'SQS',
+        Properties: {
+          Queue: { 'Fn::GetAtt': 'RefinementQueue.Arn' },
+          BatchSize: 1,
+          FunctionResponseTypes: ['ReportBatchItemFailures'],
+        },
+      },
+    })
+    expect(resource('RefinementQueue').Properties.VisibilityTimeout).toBe(
+      Number(resource('RefineFunction').Properties.Timeout) * 6,
+    )
+  })
+})
+
+describe('Lambda execution roles', () => {
+  it('gives ingress only its state, queue-send, and Translate permissions', () => {
+    expect(actionsFor('IngressFunctionRole')).toEqual([
+      'dynamodb:GetItem',
+      'dynamodb:PutItem',
+      'dynamodb:UpdateItem',
+      'dynamodb:DeleteItem',
+      'dynamodb:Query',
+      'dynamodb:TransactWriteItems',
+      'sqs:SendMessage',
+      'translate:TranslateText',
+    ])
+    expect(
+      statementFor('IngressFunctionRole', 'dynamodb:GetItem')?.Resource,
+    ).toEqual({ 'Fn::GetAtt': 'TranslationStateTable.Arn' })
+    expect(
+      statementFor('IngressFunctionRole', 'sqs:SendMessage')?.Resource,
+    ).toEqual({ 'Fn::GetAtt': 'RefinementQueue.Arn' })
+    expect(
+      statementFor('IngressFunctionRole', 'translate:TranslateText')?.Resource,
+    ).toBe('*')
+  })
+
+  it('gives refine only its state, queue-polling, and Bedrock permissions', () => {
+    expect(actionsFor('RefineFunctionRole')).toEqual([
+      'dynamodb:GetItem',
+      'dynamodb:UpdateItem',
+      'dynamodb:Query',
+      'sqs:ReceiveMessage',
+      'sqs:DeleteMessage',
+      'sqs:GetQueueAttributes',
+      'bedrock:InvokeModel',
+    ])
+    expect(
+      statementFor('RefineFunctionRole', 'dynamodb:GetItem')?.Resource,
+    ).toEqual({ 'Fn::GetAtt': 'TranslationStateTable.Arn' })
+    expect(
+      statementFor('RefineFunctionRole', 'sqs:ReceiveMessage')?.Resource,
+    ).toEqual({ 'Fn::GetAtt': 'RefinementQueue.Arn' })
+    expect(
+      statementFor('RefineFunctionRole', 'bedrock:InvokeModel')?.Resource,
+    ).toBe('*')
+  })
+
+  it.each(['IngressFunctionRole', 'RefineFunctionRole'])(
+    'allows Lambda assumption and basic CloudWatch logging for %s',
+    (logicalId) => {
+      const role = resource(logicalId)
+      expect(role.Type).toBe('AWS::IAM::Role')
+      expect(role.Properties.AssumeRolePolicyDocument).toMatchObject({
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { Service: 'lambda.amazonaws.com' },
+            Action: 'sts:AssumeRole',
+          },
+        ],
+      })
+      expect(role.Properties.ManagedPolicyArns).toEqual([
+        {
+          'Fn::Sub':
+            'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+        },
+      ])
+    },
+  )
 })
