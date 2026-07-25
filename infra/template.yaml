@@ -193,3 +193,52 @@ Resources:
         Minify: true
         Sourcemap: false
         Target: es2024
+
+  TranslationWebSocketApi:
+    Type: AWS::Serverless::WebSocketApi
+    Properties:
+      StageName: !Ref StageName
+      RouteSelectionExpression: $request.body.action
+      Routes:
+        $connect:
+          FunctionArn: !GetAtt IngressFunction.Arn
+        $disconnect:
+          FunctionArn: !GetAtt IngressFunction.Arn
+        $default:
+          FunctionArn: !GetAtt IngressFunction.Arn
+        session.start:
+          FunctionArn: !GetAtt IngressFunction.Arn
+        transcript.upsert:
+          FunctionArn: !GetAtt IngressFunction.Arn
+
+  WebSocketManageConnectionsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-manage-websocket-connections
+      Roles:
+        - !Ref IngressFunctionRole
+        - !Ref RefineFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: execute-api:ManageConnections
+            Resource: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${TranslationWebSocketApi}/${StageName}/POST/@connections/*
+
+Outputs:
+  WebSocketApiId:
+    Value: !Ref TranslationWebSocketApi
+  WebSocketUrl:
+    Value: !Sub wss://${TranslationWebSocketApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}
+  TranslationStateTableName:
+    Value: !Ref TranslationStateTable
+  RefinementQueueUrl:
+    Value: !Ref RefinementQueue
+  RefinementQueueArn:
+    Value: !GetAtt RefinementQueue.Arn
+  RefinementDeadLetterQueueUrl:
+    Value: !Ref RefinementDeadLetterQueue
+  IngressFunctionName:
+    Value: !Ref IngressFunction
+  RefineFunctionName:
+    Value: !Ref RefineFunction

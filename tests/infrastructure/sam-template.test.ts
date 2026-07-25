@@ -303,3 +303,87 @@ describe('Lambda execution roles', () => {
     },
   )
 })
+
+describe('WebSocket API', () => {
+  it('selects commands by action and sends exactly five routes to ingress', () => {
+    const api = resource('TranslationWebSocketApi')
+    expect(api.Type).toBe('AWS::Serverless::WebSocketApi')
+    expect(api.Properties.StageName).toEqual({ Ref: 'StageName' })
+    expect(api.Properties.RouteSelectionExpression).toBe('$request.body.action')
+    expect(api.Properties.Routes).toEqual({
+      $connect: {
+        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+      },
+      $disconnect: {
+        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+      },
+      $default: {
+        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+      },
+      'session.start': {
+        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+      },
+      'transcript.upsert': {
+        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+      },
+    })
+  })
+})
+
+describe('WebSocket connection permissions', () => {
+  it('attaches exact API and stage ManageConnections access to both roles', () => {
+    const policy = resource('WebSocketManageConnectionsPolicy')
+    expect(policy.Type).toBe('AWS::IAM::Policy')
+    expect(policy.Properties.Roles).toEqual([
+      { Ref: 'IngressFunctionRole' },
+      { Ref: 'RefineFunctionRole' },
+    ])
+    expect(policy.Properties.PolicyDocument).toEqual({
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Action: 'execute-api:ManageConnections',
+          Resource: {
+            'Fn::Sub':
+              'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${TranslationWebSocketApi}/${StageName}/POST/@connections/*',
+          },
+        },
+      ],
+    })
+  })
+})
+
+describe('stack outputs', () => {
+  it('exposes endpoint, state, queue, DLQ, and function identifiers', () => {
+    expect(template.Outputs).toEqual({
+      WebSocketApiId: {
+        Value: { Ref: 'TranslationWebSocketApi' },
+      },
+      WebSocketUrl: {
+        Value: {
+          'Fn::Sub':
+            'wss://${TranslationWebSocketApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}',
+        },
+      },
+      TranslationStateTableName: {
+        Value: { Ref: 'TranslationStateTable' },
+      },
+      RefinementQueueUrl: {
+        Value: { Ref: 'RefinementQueue' },
+      },
+      RefinementQueueArn: {
+        Value: { 'Fn::GetAtt': 'RefinementQueue.Arn' },
+      },
+      RefinementDeadLetterQueueUrl: {
+        Value: { Ref: 'RefinementDeadLetterQueue' },
+      },
+      IngressFunctionName: {
+        Value: { Ref: 'IngressFunction' },
+      },
+      RefineFunctionName: {
+        Value: { Ref: 'RefineFunction' },
+      },
+    })
+  })
+})
