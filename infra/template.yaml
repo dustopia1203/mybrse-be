@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Realtime translation backend
+
+Parameters:
+  StageName:
+    Type: String
+    Default: dev
+    MinLength: 1
+  DraftProvider:
+    Type: String
+    Default: amazon-translate
+    AllowedValues:
+      - amazon-translate
+  RefinerProvider:
+    Type: String
+    Default: amazon-bedrock
+    AllowedValues:
+      - amazon-bedrock
+  BedrockModelId:
+    Type: String
+    MinLength: 1
+  ContextWindowSize:
+    Type: Number
+    Default: 5
+    MinValue: 1
+  SessionRetentionSeconds:
+    Type: Number
+    Default: 86400
+    MinValue: 1
+
+Resources:
+  TranslationStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  RefinementDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties: {}
+
+  RefinementQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RefinementDeadLetterQueue.Arn
+        maxReceiveCount: 3
