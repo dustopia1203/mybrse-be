@@ -1,4 +1,5 @@
 .agents/worktrees/
+.worktrees/
 node_modules/
 coverage/
 .vitest/
