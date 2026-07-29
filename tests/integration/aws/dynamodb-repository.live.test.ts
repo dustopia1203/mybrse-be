@@ -93,7 +93,7 @@ describe('DynamoDB session repository against live AWS', () => {
     ).resolves.toEqual({ kind: 'reattached' })
     await expect(
       activeRepository.detachByConnectionId(connectionA),
-    ).resolves.toEqual({ kind: 'superseded' })
+    ).resolves.toEqual({ kind: 'not_found' })
     await expect(activeRepository.getSession(sessionId)).resolves.toMatchObject(
       {
         kind: 'found',
