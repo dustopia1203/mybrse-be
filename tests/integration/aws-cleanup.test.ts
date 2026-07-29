@@ -352,6 +352,51 @@ describe('live AWS cleanup ownership guards', () => {
     expect(registry.removedQueueSessionIds).toEqual(new Set([job.sessionId]))
   })
 
+  it('restores later non-owned messages after deleting the requested job in the same receive batch', async () => {
+    const registry = createTestRunRegistry()
+    const job = {
+      sessionId: registerSessionId(registry),
+      segmentId: registerSegmentId(registry),
+      sequence: 1,
+      revision: 1,
+    }
+    registerExpectedQueueJob(registry, job)
+    const client = new ScriptedSqsClient([
+      {
+        Messages: [
+          { Body: JSON.stringify(job), ReceiptHandle: 'owned' },
+          { Body: '{malformed', ReceiptHandle: 'later-malformed' },
+        ],
+      },
+      {},
+    ])
+
+    await expect(
+      removeExpectedQueueJob({
+        client: client as never,
+        queueUrl: 'https://example.com/queue',
+        registry,
+        sessionId: job.sessionId,
+      }),
+    ).resolves.toBe(true)
+
+    expect(client.commands.map((command) => command.input)).toEqual([
+      {
+        QueueUrl: 'https://example.com/queue',
+        MaxNumberOfMessages: 10,
+        WaitTimeSeconds: 1,
+        VisibilityTimeout: 5,
+      },
+      { QueueUrl: 'https://example.com/queue', ReceiptHandle: 'owned' },
+      {
+        QueueUrl: 'https://example.com/queue',
+        ReceiptHandle: 'later-malformed',
+        VisibilityTimeout: 0,
+      },
+    ])
+    expect(registry.removedQueueSessionIds).toEqual(new Set([job.sessionId]))
+  })
+
   it('restores foreign, mismatched, and malformed queue messages without deleting them', async () => {
     const registry = createTestRunRegistry()
     const job = {

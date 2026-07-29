@@ -210,6 +210,7 @@ export async function removeExpectedQueueJob(input: {
         }),
       )
 
+      let removed = false
       for (const message of output.Messages ?? []) {
         const receiptHandle = message.ReceiptHandle
         const job = ownedQueueJob(input.registry, message.Body)
@@ -221,7 +222,8 @@ export async function removeExpectedQueueJob(input: {
             }),
           )
           markQueueJobRemoved(input.registry, input.sessionId)
-          return true
+          removed = true
+          continue
         }
 
         if (receiptHandle?.length) {
@@ -234,6 +236,7 @@ export async function removeExpectedQueueJob(input: {
           )
         }
       }
+      if (removed) return true
     }
     return false
   } catch {
