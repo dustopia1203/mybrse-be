@@ -11,6 +11,14 @@ export function assertOwnedDynamoKey(
   registry: TestRunRegistry,
   key: { PK: string; SK: string },
 ): void {
+  if (
+    typeof key?.PK !== 'string' ||
+    typeof key?.SK !== 'string' ||
+    key.SK.length === 0
+  ) {
+    throw new Error(UNOWNED_DYNAMO_KEY_MESSAGE)
+  }
+
   const sessionId = key.PK.startsWith('SESSION#')
     ? key.PK.slice('SESSION#'.length)
     : undefined
@@ -19,9 +27,8 @@ export function assertOwnedDynamoKey(
     : undefined
 
   if (
-    key.SK.length > 0 &&
-    ((sessionId !== undefined && registry.sessionIds.has(sessionId)) ||
-      (connectionId !== undefined && registry.connectionIds.has(connectionId)))
+    (sessionId !== undefined && registry.sessionIds.has(sessionId)) ||
+    (connectionId !== undefined && registry.connectionIds.has(connectionId))
   ) {
     return
   }
@@ -40,6 +47,7 @@ export function ownedQueueJob(
     const expectedJob = registry.expectedQueueJobs.get(parsedJob.data.sessionId)
     if (
       expectedJob === undefined ||
+      expectedJob.sessionId !== parsedJob.data.sessionId ||
       expectedJob.segmentId !== parsedJob.data.segmentId ||
       expectedJob.sequence !== parsedJob.data.sequence ||
       expectedJob.revision !== parsedJob.data.revision

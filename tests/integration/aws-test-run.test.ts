@@ -5,6 +5,8 @@ import {
   createTestRunRegistry,
   generateUuidV7,
   registerConnectionId,
+  registerExpectedQueueJob,
+  registerSegmentId,
   registerSessionId,
 } from './aws/support/test-run'
 
@@ -26,5 +28,34 @@ describe('live AWS test-run identity', () => {
     expect(registry.sessionIds.has(sessionId)).toBe(true)
     expect(registry.connectionIds.has(connectionId)).toBe(true)
     expect(connectionId).toBe(`integration-${registry.runId}-lifecycle`)
+  })
+
+  it('rejects UUID v7 timestamps outside 48-bit milliseconds and wrong entropy length', () => {
+    expect(() => generateUuidV7(-1)).toThrow()
+    expect(() => generateUuidV7(281_474_976_710_656)).toThrow()
+    expect(() => generateUuidV7(0, Uint8Array.from([0]))).toThrow()
+  })
+
+  it('rejects expected queue jobs before their identifiers are registered', () => {
+    const registry = createTestRunRegistry()
+    const sessionId = registerSessionId(registry)
+    const segmentId = registerSegmentId(registry)
+
+    expect(() =>
+      registerExpectedQueueJob(registry, {
+        sessionId: generateUuidV7(),
+        segmentId,
+        sequence: 3,
+        revision: 2,
+      }),
+    ).toThrow('Expected queue job must use registered session and segment IDs')
+    expect(() =>
+      registerExpectedQueueJob(registry, {
+        sessionId,
+        segmentId: generateUuidV7(),
+        sequence: 3,
+        revision: 2,
+      }),
+    ).toThrow('Expected queue job must use registered session and segment IDs')
   })
 })
