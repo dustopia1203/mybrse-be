@@ -1,4 +1,10 @@
 import { BatchWriteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
+import {
+  ChangeMessageVisibilityCommand,
+  DeleteMessageCommand,
+  ReceiveMessageCommand,
+  type SQSClient,
+} from '@aws-sdk/client-sqs'
 import type {
   BatchWriteCommandInput,
   DynamoDBDocumentClient,
@@ -9,7 +15,7 @@ import {
   type RefinementJob,
 } from '../../../../src/contracts'
 
-import type { TestRunRegistry } from './test-run'
+import { markQueueJobRemoved, type TestRunRegistry } from './test-run'
 
 const UNOWNED_DYNAMO_KEY_MESSAGE = 'Refusing to delete an unowned DynamoDB key'
 const DYNAMO_CLEANUP_FAILURE_MESSAGE = 'Unable to clean up owned DynamoDB items'
@@ -172,5 +178,65 @@ export function ownedQueueJob(
     return parsedJob.data
   } catch {
     return undefined
+  }
+}
+
+const SQS_CLEANUP_FAILURE_MESSAGE =
+  'Unable to inspect the integration test queue'
+
+export async function removeExpectedQueueJob(input: {
+  client: SQSClient
+  queueUrl: string
+  registry: TestRunRegistry
+  sessionId: string
+  deadlineMs?: number
+  maxReceives?: number
+}): Promise<boolean> {
+  const deadlineAt = Date.now() + (input.deadlineMs ?? 10_000)
+  const maxReceives = input.maxReceives ?? 10
+
+  try {
+    for (
+      let receives = 0;
+      receives < maxReceives && Date.now() < deadlineAt;
+      receives += 1
+    ) {
+      const output = await input.client.send(
+        new ReceiveMessageCommand({
+          QueueUrl: input.queueUrl,
+          MaxNumberOfMessages: 10,
+          WaitTimeSeconds: 1,
+          VisibilityTimeout: 5,
+        }),
+      )
+
+      for (const message of output.Messages ?? []) {
+        const receiptHandle = message.ReceiptHandle
+        const job = ownedQueueJob(input.registry, message.Body)
+        if (job?.sessionId === input.sessionId && receiptHandle?.length) {
+          await input.client.send(
+            new DeleteMessageCommand({
+              QueueUrl: input.queueUrl,
+              ReceiptHandle: receiptHandle,
+            }),
+          )
+          markQueueJobRemoved(input.registry, input.sessionId)
+          return true
+        }
+
+        if (receiptHandle?.length) {
+          await input.client.send(
+            new ChangeMessageVisibilityCommand({
+              QueueUrl: input.queueUrl,
+              ReceiptHandle: receiptHandle,
+              VisibilityTimeout: 0,
+            }),
+          )
+        }
+      }
+    }
+    return false
+  } catch {
+    throw new Error(SQS_CLEANUP_FAILURE_MESSAGE)
   }
 }
