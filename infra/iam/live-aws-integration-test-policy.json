@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IntegrationDynamoDb",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:TransactWriteItems"
+      ],
+      "Resource": "arn:aws:dynamodb:__AWS_REGION__:__AWS_ACCOUNT_ID__:table/__TABLE_NAME__"
+    },
+    {
+      "Sid": "IntegrationSqs",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:ChangeMessageVisibility"
+      ],
+      "Resource": "arn:aws:sqs:__AWS_REGION__:__AWS_ACCOUNT_ID__:__QUEUE_NAME__"
+    },
+    {
+      "Sid": "IntegrationTranslate",
+      "Effect": "Allow",
+      "Action": "translate:TranslateText",
+      "Resource": "*"
+    },
+    {
+      "Sid": "IntegrationBedrock",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": "*"
+    }
+  ]
+}
