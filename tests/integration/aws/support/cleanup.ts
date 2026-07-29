@@ -1,3 +1,9 @@
+import { BatchWriteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
+import type {
+  BatchWriteCommandInput,
+  DynamoDBDocumentClient,
+} from '@aws-sdk/lib-dynamodb'
+
 import {
   RefinementJobSchema,
   type RefinementJob,
@@ -6,10 +12,16 @@ import {
 import type { TestRunRegistry } from './test-run'
 
 const UNOWNED_DYNAMO_KEY_MESSAGE = 'Refusing to delete an unowned DynamoDB key'
+const DYNAMO_CLEANUP_FAILURE_MESSAGE = 'Unable to clean up owned DynamoDB items'
+
+type DynamoKey = { PK: string; SK: string }
+type DeleteWriteRequest = NonNullable<
+  NonNullable<BatchWriteCommandInput['RequestItems']>[string]
+>[number]
 
 export function assertOwnedDynamoKey(
   registry: TestRunRegistry,
-  key: { PK: string; SK: string },
+  key: { PK: unknown; SK: unknown },
 ): void {
   if (
     typeof key?.PK !== 'string' ||
@@ -34,6 +46,108 @@ export function assertOwnedDynamoKey(
   }
 
   throw new Error(UNOWNED_DYNAMO_KEY_MESSAGE)
+}
+
+function itemKey(item: Record<string, unknown>): DynamoKey {
+  return { PK: item.PK as string, SK: item.SK as string }
+}
+
+function deleteRequestsForKeys(
+  keys: readonly DynamoKey[],
+): DeleteWriteRequest[] {
+  return keys.map((key) => ({ DeleteRequest: { Key: key } }))
+}
+
+function assertOwnedDeleteRequests(
+  registry: TestRunRegistry,
+  requests: readonly DeleteWriteRequest[],
+): void {
+  for (const request of requests) {
+    if (request.DeleteRequest?.Key === undefined) {
+      throw new Error(DYNAMO_CLEANUP_FAILURE_MESSAGE)
+    }
+    assertOwnedDynamoKey(registry, {
+      PK: request.DeleteRequest.Key.PK,
+      SK: request.DeleteRequest.Key.SK,
+    })
+  }
+}
+
+async function deleteBatch(input: {
+  client: DynamoDBDocumentClient
+  tableName: string
+  registry: TestRunRegistry
+  keys: readonly DynamoKey[]
+}): Promise<void> {
+  let requests: DeleteWriteRequest[] = deleteRequestsForKeys(input.keys)
+
+  for (let send = 0; send < 3; send += 1) {
+    assertOwnedDeleteRequests(input.registry, requests)
+    const output = await input.client.send(
+      new BatchWriteCommand({
+        RequestItems: { [input.tableName]: requests },
+      }),
+    )
+    requests = output.UnprocessedItems?.[input.tableName] ?? []
+    if (requests.length === 0) return
+  }
+
+  throw new Error(DYNAMO_CLEANUP_FAILURE_MESSAGE)
+}
+
+export async function cleanupOwnedDynamoDbItems(input: {
+  client: DynamoDBDocumentClient
+  tableName: string
+  registry: TestRunRegistry
+}): Promise<void> {
+  try {
+    const keys: DynamoKey[] = []
+
+    for (const sessionId of input.registry.sessionIds) {
+      let exclusiveStartKey: DynamoKey | undefined
+      do {
+        const output = await input.client.send(
+          new QueryCommand({
+            TableName: input.tableName,
+            KeyConditionExpression: '#PK = :pk',
+            ExpressionAttributeNames: { '#PK': 'PK' },
+            ExpressionAttributeValues: { ':pk': `SESSION#${sessionId}` },
+            ProjectionExpression: 'PK, SK',
+            ...(exclusiveStartKey === undefined
+              ? {}
+              : { ExclusiveStartKey: exclusiveStartKey }),
+          }),
+        )
+        keys.push(...(output.Items ?? []).map(itemKey))
+        exclusiveStartKey = output.LastEvaluatedKey as DynamoKey | undefined
+      } while (exclusiveStartKey !== undefined)
+    }
+
+    keys.push(
+      ...[...input.registry.connectionIds].map((connectionId) => ({
+        PK: `CONNECTION#${connectionId}`,
+        SK: 'META',
+      })),
+    )
+
+    for (const key of keys) assertOwnedDynamoKey(input.registry, key)
+
+    for (let offset = 0; offset < keys.length; offset += 25) {
+      await deleteBatch({
+        ...input,
+        keys: keys.slice(offset, offset + 25),
+      })
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === UNOWNED_DYNAMO_KEY_MESSAGE ||
+        error.message === DYNAMO_CLEANUP_FAILURE_MESSAGE)
+    ) {
+      throw error
+    }
+    throw new Error(DYNAMO_CLEANUP_FAILURE_MESSAGE)
+  }
 }
 
 export function ownedQueueJob(
