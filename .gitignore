@@ -6,3 +6,4 @@ coverage/
 dist/
 .aws-sam/
 *.tsbuildinfo
+/.env
