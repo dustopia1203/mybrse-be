@@ -152,6 +152,10 @@ Resources:
         EntryPoints:
           - src/handlers/ingress-handler.ts
         Format: esm
+        OutExtension:
+          - .js=.mjs
+        Banner:
+          - 'js=import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
         Minify: true
         Sourcemap: false
         Target: es2024
@@ -190,26 +194,89 @@ Resources:
         EntryPoints:
           - src/handlers/refine-handler.ts
         Format: esm
+        OutExtension:
+          - .js=.mjs
+        Banner:
+          - 'js=import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
         Minify: true
         Sourcemap: false
         Target: es2024
 
   TranslationWebSocketApi:
-    Type: AWS::Serverless::WebSocketApi
+    Type: AWS::ApiGatewayV2::Api
     Properties:
-      StageName: !Ref StageName
+      ProtocolType: WEBSOCKET
       RouteSelectionExpression: $request.body.action
-      Routes:
-        $connect:
-          FunctionArn: !GetAtt IngressFunction.Arn
-        $disconnect:
-          FunctionArn: !GetAtt IngressFunction.Arn
-        $default:
-          FunctionArn: !GetAtt IngressFunction.Arn
-        session.start:
-          FunctionArn: !GetAtt IngressFunction.Arn
-        transcript.upsert:
-          FunctionArn: !GetAtt IngressFunction.Arn
+
+  IngressWebSocketIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref TranslationWebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationMethod: POST
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IngressFunction.Arn}/invocations
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TranslationWebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${IngressWebSocketIntegration}
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TranslationWebSocketApi
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${IngressWebSocketIntegration}
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TranslationWebSocketApi
+      RouteKey: $default
+      AuthorizationType: NONE
+      Target: !Sub integrations/${IngressWebSocketIntegration}
+
+  SessionStartRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TranslationWebSocketApi
+      RouteKey: session.start
+      AuthorizationType: NONE
+      Target: !Sub integrations/${IngressWebSocketIntegration}
+
+  TranscriptUpsertRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TranslationWebSocketApi
+      RouteKey: transcript.upsert
+      AuthorizationType: NONE
+      Target: !Sub integrations/${IngressWebSocketIntegration}
+
+  TranslationWebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+      - DefaultRoute
+      - SessionStartRoute
+      - TranscriptUpsertRoute
+      - IngressWebSocketPermission
+    Properties:
+      ApiId: !Ref TranslationWebSocketApi
+      StageName: !Ref StageName
+      AutoDeploy: true
+
+  IngressWebSocketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref IngressFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${TranslationWebSocketApi}/${StageName}/*
 
   WebSocketManageConnectionsPolicy:
     Type: AWS::IAM::Policy

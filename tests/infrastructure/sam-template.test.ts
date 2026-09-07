@@ -211,6 +211,10 @@ describe('Lambda functions and packaging', () => {
         BuildProperties: {
           EntryPoints: [entryPoint],
           Format: 'esm',
+          OutExtension: ['.js=.mjs'],
+          Banner: [
+            'js=import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);',
+          ],
           Minify: true,
           Sourcemap: false,
           Target: 'es2024',
@@ -305,26 +309,52 @@ describe('Lambda execution roles', () => {
 })
 
 describe('WebSocket API', () => {
-  it('selects commands by action and sends exactly five routes to ingress', () => {
-    const api = resource('TranslationWebSocketApi')
-    expect(api.Type).toBe('AWS::Serverless::WebSocketApi')
-    expect(api.Properties.StageName).toEqual({ Ref: 'StageName' })
-    expect(api.Properties.RouteSelectionExpression).toBe('$request.body.action')
-    expect(api.Properties.Routes).toEqual({
-      $connect: {
-        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+  it('preserves dotted command routes through a Lambda proxy integration', () => {
+    expect(resource('TranslationWebSocketApi')).toEqual({
+      Type: 'AWS::ApiGatewayV2::Api',
+      Properties: {
+        ProtocolType: 'WEBSOCKET',
+        RouteSelectionExpression: '$request.body.action',
       },
-      $disconnect: {
-        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+    })
+    const routes = Object.values(template.Resources).filter(
+      (value) => value.Type === 'AWS::ApiGatewayV2::Route',
+    )
+    expect(routes.map((value) => value.Properties.RouteKey).sort()).toEqual([
+      '$connect',
+      '$default',
+      '$disconnect',
+      'session.start',
+      'transcript.upsert',
+    ])
+    for (const route of routes) {
+      expect(route.Properties).toMatchObject({
+        ApiId: { Ref: 'TranslationWebSocketApi' },
+        AuthorizationType: 'NONE',
+        Target: { 'Fn::Sub': 'integrations/${IngressWebSocketIntegration}' },
+      })
+    }
+    expect(resource('IngressWebSocketIntegration').Properties).toEqual({
+      ApiId: { Ref: 'TranslationWebSocketApi' },
+      IntegrationType: 'AWS_PROXY',
+      IntegrationMethod: 'POST',
+      IntegrationUri: {
+        'Fn::Sub':
+          'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IngressFunction.Arn}/invocations',
       },
-      $default: {
-        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
-      },
-      'session.start': {
-        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
-      },
-      'transcript.upsert': {
-        FunctionArn: { 'Fn::GetAtt': 'IngressFunction.Arn' },
+    })
+    expect(resource('TranslationWebSocketStage').Properties).toEqual({
+      ApiId: { Ref: 'TranslationWebSocketApi' },
+      StageName: { Ref: 'StageName' },
+      AutoDeploy: true,
+    })
+    expect(resource('IngressWebSocketPermission').Properties).toEqual({
+      Action: 'lambda:InvokeFunction',
+      FunctionName: { Ref: 'IngressFunction' },
+      Principal: 'apigateway.amazonaws.com',
+      SourceArn: {
+        'Fn::Sub':
+          'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${TranslationWebSocketApi}/${StageName}/*',
       },
     })
   })
