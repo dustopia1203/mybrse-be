@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude tests/localstack/** --exclude tests/integration/aws/**",
+    "test": "vitest run --exclude \"tests/localstack/**\" --exclude \"tests/integration/aws/**\"",
     "test:watch": "vitest",
     "test:localstack": "pnpm localstack:up && vitest run tests/localstack",
     "test:integration:aws": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts",
