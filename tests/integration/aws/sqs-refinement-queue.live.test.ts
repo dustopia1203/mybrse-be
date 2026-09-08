@@ -47,6 +47,8 @@ afterAll(async () => {
       cleanupFailure ??= error
     }
   }
+  // Preserve the original cleanup failure, including non-Error rejections.
+  // eslint-disable-next-line @typescript-eslint/only-throw-error
   if (cleanupFailure !== undefined) throw cleanupFailure
 })
 

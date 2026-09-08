@@ -17,5 +17,9 @@ export type TranslationContextEntry = z.infer<
   typeof TranslationContextEntrySchema
 >
 
+/**
+ * Preceding final translations ordered by ascending sequence by the
+ * repository.
+ */
 export const TranslationContextSchema = z.array(TranslationContextEntrySchema)
 export type TranslationContext = z.infer<typeof TranslationContextSchema>

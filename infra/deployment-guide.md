@@ -4,7 +4,7 @@ Run all commands from the repository root.
 
 ## 1. Prepare the tools
 
-Install Node.js 24, pnpm 11.8.0, AWS CLI v2, and AWS SAM CLI.
+Install Node.js >=24, pnpm 11.8.0, AWS CLI v2, and AWS SAM CLI.
 Check the versions, then install dependencies:
 
 ```bash

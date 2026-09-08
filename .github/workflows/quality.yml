@@ -1,0 +1,60 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm security:audit
+      - name: Install Gitleaks
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gitleaks-release" "$RUNNER_TEMP/gitleaks-bin"
+          cd "$RUNNER_TEMP/gitleaks-release"
+          gh release download --repo gitleaks/gitleaks \
+            --pattern 'gitleaks_*_linux_x64.tar.gz' \
+            --pattern 'gitleaks_*_checksums.txt'
+          sha256sum --check --ignore-missing gitleaks_*_checksums.txt
+          tar -xzf gitleaks_*_linux_x64.tar.gz -C "$RUNNER_TEMP/gitleaks-bin" gitleaks
+          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      - name: Scan repository history for secrets
+        run: gitleaks git --redact --no-banner
+      - name: Install Trivy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivy-release" "$RUNNER_TEMP/trivy-bin"
+          cd "$RUNNER_TEMP/trivy-release"
+          gh release download --repo aquasecurity/trivy \
+            --pattern 'trivy_*_Linux-64bit.tar.gz' \
+            --pattern 'trivy_*_checksums.txt'
+          sha256sum --check --ignore-missing trivy_*_checksums.txt
+          tar -xzf trivy_*_Linux-64bit.tar.gz -C "$RUNNER_TEMP/trivy-bin" trivy
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+      - run: pnpm security:trivy

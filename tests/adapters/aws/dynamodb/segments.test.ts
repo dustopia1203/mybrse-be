@@ -1,4 +1,5 @@
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import type { UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import { describe, expect, it } from 'vitest'
 
 import { createSegmentOperations } from '../../../../src/adapters/aws/dynamodb/segments'

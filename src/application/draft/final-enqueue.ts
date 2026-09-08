@@ -44,6 +44,10 @@ const reportQueueStateFailure = async (
     : { kind: 'failed', error: reported.error }
 }
 
+/**
+ * Enqueues before marking QUEUED so a failed enqueue remains retryable.
+ * These operations are not atomic: a failed state update can cause duplicate jobs.
+ */
 export const enqueueFinal = async (
   input: EnqueueFinalInput,
 ): Promise<ProcessTranscriptResult> => {

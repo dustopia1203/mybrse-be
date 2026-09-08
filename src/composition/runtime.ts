@@ -1,8 +1,4 @@
-import {
-  ApiGatewayManagementApiClient,
-  type PostToConnectionCommand,
-  type PostToConnectionCommandOutput,
-} from '@aws-sdk/client-apigatewaymanagementapi'
+import { ApiGatewayManagementApiClient } from '@aws-sdk/client-apigatewaymanagementapi'
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { SQSClient } from '@aws-sdk/client-sqs'

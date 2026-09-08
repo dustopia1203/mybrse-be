@@ -12,7 +12,7 @@ Keep business logic independent of AWS implementations through the port interfac
 
 ## Build, Test, and Development Commands
 
-Use Node.js 24 and pnpm 11.8.0. Install dependencies with `pnpm install`.
+Use Node.js >=24 and pnpm 11.8.0. Install dependencies with `pnpm install`.
 
 - `pnpm build` or `pnpm typecheck`: check TypeScript without emitting files.
 - `pnpm test`: run the default suite, excluding LocalStack and live AWS tests.
@@ -21,13 +21,25 @@ Use Node.js 24 and pnpm 11.8.0. Install dependencies with `pnpm install`.
 - `pnpm localstack:down`: stop LocalStack.
 - `pnpm test:integration:aws`: load `.env` when present and run live AWS tests.
 - `pnpm format`: apply Prettier formatting.
-- `pnpm check`: run formatting checks, type checking, and the default test suite.
+- `pnpm lint`: run ESLint with TypeScript type information.
+- `pnpm securitycheck`: scan staged changes for secrets; requires Gitleaks.
+- `pnpm security:audit`: audit dependencies, failing at high or critical severity.
+- `pnpm security:trivy`: scan dependencies and infrastructure with Trivy, failing at high or critical severity.
+- `pnpm check`: run formatting checks, lint, type checking, and the default test suite.
+
+`pnpm install` activates the pre-commit hook. It checks staged formatting and
+lint, scans secrets, then runs type checking and default tests. See
+`CONTRIBUTING.md` for tool installation and hook behavior.
 
 There is no standalone development-server script.
 
 ## Coding Style & Naming Conventions
 
 Use strict TypeScript and ES modules. Follow Prettier: two-space indentation, single quotes, no semicolons, trailing commas, and an 80-column print width. Use kebab-case filenames, PascalCase types and schemas, and camelCase functions and variables. Use `import type` for type-only imports.
+
+Add JSDoc for public workflows, port contracts, and non-obvious domain rules.
+Explain side effects, duplicate handling and retry semantics without repeating
+TypeScript types. Keep comments consistent with behavior.
 
 ## Testing Guidelines
 

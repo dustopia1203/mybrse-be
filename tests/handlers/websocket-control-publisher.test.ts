@@ -1,7 +1,5 @@
-import {
-  PostToConnectionCommand,
-  type PostToConnectionCommandOutput,
-} from '@aws-sdk/client-apigatewaymanagementapi'
+import type { PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi'
+import { type PostToConnectionCommandOutput } from '@aws-sdk/client-apigatewaymanagementapi'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -27,6 +25,8 @@ class ScriptedSender {
     command: PostToConnectionCommand,
   ): Promise<PostToConnectionCommandOutput> {
     this.command = command
+    // Exercise normalization of provider failures that are not Error objects.
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
     if (this.thrown !== undefined) throw this.thrown
     return {} as PostToConnectionCommandOutput
   }

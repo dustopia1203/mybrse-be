@@ -1,9 +1,6 @@
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 
-type ScriptStep =
-  unknown | Error | ((command: unknown) => unknown | Promise<unknown>)
-
-export function scriptedClient(...steps: ScriptStep[]) {
+export function scriptedClient(...steps: unknown[]) {
   const commands: unknown[] = []
   let index = 0
   const send = async (command: unknown): Promise<unknown> => {
@@ -15,7 +12,9 @@ export function scriptedClient(...steps: ScriptStep[]) {
     if (step instanceof Error) {
       throw step
     }
-    return typeof step === 'function' ? step(command) : step
+    return typeof step === 'function'
+      ? (step as (command: unknown) => unknown)(command)
+      : step
   }
   return {
     client: { send } as unknown as DynamoDBDocumentClient,

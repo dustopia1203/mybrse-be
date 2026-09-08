@@ -8,9 +8,17 @@ import {
   SessionIdSchema,
 } from './scalars'
 
+/**
+ * Final drafts progress from PENDING to QUEUED to COMPLETED; workers may
+ * finish before QUEUED is recorded.
+ */
 export const RefinementStatusSchema = z.enum(['PENDING', 'QUEUED', 'COMPLETED'])
 export type RefinementStatus = z.infer<typeof RefinementStatusSchema>
 
+/**
+ * A transcript revision with media offsets in milliseconds and endMs >=
+ * startMs.
+ */
 export const SegmentSchema = z
   .strictObject({
     sessionId: SessionIdSchema,

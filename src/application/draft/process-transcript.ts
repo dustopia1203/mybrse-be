@@ -17,7 +17,7 @@ import type {
 import { reportCorrelatedError } from './error-publication'
 import { enqueueFinal } from './final-enqueue'
 
-export interface ProcessTranscriptInput extends TranscriptRevisionInput {}
+export type ProcessTranscriptInput = TranscriptRevisionInput
 export interface ProcessTranscriptDependencies {
   repository: SessionStateRepository
   translator: DraftTranslator
@@ -229,6 +229,12 @@ const processDuplicate = async (input: {
   })
 }
 
+/**
+ * Accepts a transcript revision, persists and publishes its draft, then queues finals.
+ * Duplicate delivery resumes from persisted state; stale revisions are skipped.
+ * A queue_pending result means queueing or its state update failed after draft save.
+ * Publication and enqueue are separate side effects and can repeat on retry.
+ */
 export const createProcessTranscript =
   (dependencies: ProcessTranscriptDependencies) =>
   async (input: ProcessTranscriptInput): Promise<ProcessTranscriptResult> => {

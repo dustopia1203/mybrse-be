@@ -48,13 +48,21 @@ Resources:
         AttributeName: expiresAt
         Enabled: true
 
+  # Trivy's CloudFormation parser does not read SqsManagedSseEnabled.
+  # SSE-SQS is explicitly enabled below and enforced by the SAM template test.
+  #trivy:ignore:AWS-0096
   RefinementDeadLetterQueue:
     Type: AWS::SQS::Queue
-    Properties: {}
+    Properties:
+      SqsManagedSseEnabled: true
 
+  # Trivy's CloudFormation parser does not read SqsManagedSseEnabled.
+  # SSE-SQS is explicitly enabled below and enforced by the SAM template test.
+  #trivy:ignore:AWS-0096
   RefinementQueue:
     Type: AWS::SQS::Queue
     Properties:
+      SqsManagedSseEnabled: true
       VisibilityTimeout: 180
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt RefinementDeadLetterQueue.Arn

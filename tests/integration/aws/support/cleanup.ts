@@ -152,6 +152,8 @@ export async function cleanupOwnedDynamoDbItems(input: {
     ) {
       throw error
     }
+    // Do not retain the provider error: it may contain sensitive resource data.
+    // eslint-disable-next-line preserve-caught-error
     throw new Error(DYNAMO_CLEANUP_FAILURE_MESSAGE)
   }
 }

@@ -1,7 +1,5 @@
-import {
-  ConverseCommand,
-  type ConverseCommandOutput,
-} from '@aws-sdk/client-bedrock-runtime'
+import type { ConverseCommand } from '@aws-sdk/client-bedrock-runtime'
+import { type ConverseCommandOutput } from '@aws-sdk/client-bedrock-runtime'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -21,7 +19,7 @@ const INPUT = {
 class ScriptedSender implements BedrockCommandSender {
   command?: ConverseCommand
   constructor(
-    private readonly result: ConverseCommandOutput | unknown,
+    private readonly result: unknown,
     private readonly throws = false,
   ) {}
   async send(command: ConverseCommand): Promise<ConverseCommandOutput> {

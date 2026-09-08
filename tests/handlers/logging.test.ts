@@ -26,7 +26,7 @@ describe('safe structured logging', () => {
       body: '{"raw":"payload"}',
       errorCode: 'INVALID_INPUT',
     } as never)
-    const logged = JSON.parse(spy.mock.calls[0]?.[0] as string)
+    const logged: unknown = JSON.parse(spy.mock.calls[0]?.[0] as string)
     expect(logged).toMatchObject({
       level: 'warn',
       handler: 'refine',

@@ -1,7 +1,5 @@
-import {
-  SendMessageCommand,
-  type SendMessageCommandOutput,
-} from '@aws-sdk/client-sqs'
+import type { SendMessageCommand } from '@aws-sdk/client-sqs'
+import { type SendMessageCommandOutput } from '@aws-sdk/client-sqs'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -24,6 +22,8 @@ class ScriptedSender implements SqsCommandSender {
   constructor(private readonly thrown?: unknown) {}
   async send(command: SendMessageCommand): Promise<SendMessageCommandOutput> {
     this.command = command
+    // Exercise normalization of provider failures that are not Error objects.
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
     if (this.thrown !== undefined) throw this.thrown
     return {} as SendMessageCommandOutput
   }
@@ -40,7 +40,7 @@ describe('SqsRefinementQueue', () => {
       kind: 'enqueued',
     })
     expect(sender.command?.input.QueueUrl).toContain('/queue')
-    const body = JSON.parse(sender.command?.input.MessageBody ?? '')
+    const body: unknown = JSON.parse(sender.command?.input.MessageBody ?? '')
     expect(RefinementJobSchema.parse(body)).toEqual(REFERENCE)
     expect(sender.command?.input).toEqual({
       QueueUrl: 'https://sqs.ap-southeast-1.amazonaws.com/123/queue',
@@ -52,7 +52,7 @@ describe('SqsRefinementQueue', () => {
     const sender = new ScriptedSender()
     const queue = new SqsRefinementQueue(sender, 'https://example.com/queue')
     await expect(
-      queue.enqueue({ ...REFERENCE, sequence: -1 } as never),
+      queue.enqueue({ ...REFERENCE, sequence: -1 }),
     ).resolves.toMatchObject({
       kind: 'failed',
       error: { code: 'INTERNAL_ERROR' },

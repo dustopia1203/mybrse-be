@@ -27,6 +27,10 @@ export interface StartSessionDependencies {
   sessionRetentionSeconds: number
 }
 
+/**
+ * Creates the session-start workflow with an injected clock and retention policy.
+ * Reattachment preserves the existing session; a language conflict is rejected.
+ */
 export const createStartSession =
   ({ repository, nowMs, sessionRetentionSeconds }: StartSessionDependencies) =>
   async (input: StartSessionInput): Promise<StartSessionResult> => {

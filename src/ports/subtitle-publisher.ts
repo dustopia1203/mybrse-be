@@ -22,6 +22,11 @@ export interface CorrelatedErrorPublication {
 export type PublishResult =
   { kind: 'published' } | { kind: 'failed'; error: ApplicationError }
 
+/**
+ * Publishes revision-correlated events to the supplied connection.
+ * A published result confirms transport acceptance, not client processing.
+ * Transport failures, including a gone connection, are returned as errors.
+ */
 export interface SubtitlePublisher {
   publishDraft(
     connection: SessionConnection,

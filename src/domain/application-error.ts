@@ -16,6 +16,10 @@ export const ApplicationErrorCodeSchema = z.enum([
 ])
 export type ApplicationErrorCode = z.infer<typeof ApplicationErrorCodeSchema>
 
+/**
+ * Classifies application errors for clients; queue acknowledgement is decided
+ * separately by the refinement workflow's disposition.
+ */
 export const APPLICATION_ERROR_RETRYABILITY = {
   INVALID_INPUT: false,
   UNSUPPORTED_ACTION: false,

@@ -10,7 +10,7 @@ import type {
   TranslationRefiner,
 } from '../../ports'
 
-export interface ProcessRefinementInput extends SessionRevisionReference {}
+export type ProcessRefinementInput = SessionRevisionReference
 
 export type RefinementAcknowledgementReason =
   'stale' | 'already_completed' | 'not_found' | 'connection_gone'
@@ -78,6 +78,12 @@ const publishCanonical = async (input: {
     : { kind: 'completed', reference: input.reference }
 }
 
+/**
+ * Refines a current final revision and publishes its persisted canonical result.
+ * Completed revisions loaded at entry are republished without another provider call.
+ * Acknowledged jobs can be removed; failed jobs request queue retry even when
+ * the embedded application error is classified as non-retryable.
+ */
 export const createProcessRefinement =
   (dependencies: ProcessRefinementDependencies) =>
   async (

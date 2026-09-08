@@ -17,5 +17,9 @@ export type RefinementResult =
   | { kind: 'failed'; error: ApplicationError }
 
 export interface TranslationRefiner {
+  /**
+   * Refines a final draft using preceding context, returning normalized
+   * provider errors.
+   */
   refine(input: RefinementInput): Promise<RefinementResult>
 }

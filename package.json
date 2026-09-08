@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.8.0",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -18,7 +18,14 @@
     "localstack:down": "docker compose -f docker-compose.localstack.yml down",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm typecheck && pnpm test"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "prepare": "husky",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "pnpm lint --fix",
+    "securitycheck": "sh scripts/check-secrets.sh",
+    "security:audit": "pnpm audit --audit-level=high",
+    "security:trivy": "sh scripts/check-trivy.sh",
+    "precommit": "lint-staged --hide-unstaged --concurrent=false --diff-filter=ACMRD"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.1079.0",
@@ -30,11 +37,17 @@
     "zod": "^4.0.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/aws-lambda": "^8.10.162",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.1",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.0",
     "prettier": "^3.0.0",
     "typescript": "~5.9.3",
+    "typescript-eslint": "^8.69.0",
     "vitest": "^4.1.6",
     "yaml": "^2.9.0"
   }

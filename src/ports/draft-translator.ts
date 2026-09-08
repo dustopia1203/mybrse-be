@@ -11,5 +11,9 @@ export type DraftTranslationResult =
   | { kind: 'failed'; error: ApplicationError }
 
 export interface DraftTranslator {
+  /**
+   * Translates without context; provider failures are normalized into failed
+   * results.
+   */
   translate(input: DraftTranslationInput): Promise<DraftTranslationResult>
 }

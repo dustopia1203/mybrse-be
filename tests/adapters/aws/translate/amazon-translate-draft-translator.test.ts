@@ -1,7 +1,5 @@
-import {
-  TranslateTextCommand,
-  type TranslateTextCommandOutput,
-} from '@aws-sdk/client-translate'
+import type { TranslateTextCommand } from '@aws-sdk/client-translate'
+import { type TranslateTextCommandOutput } from '@aws-sdk/client-translate'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -14,7 +12,7 @@ class ScriptedSender implements TranslateCommandSender {
   command?: TranslateTextCommand
 
   constructor(
-    private readonly result: TranslateTextCommandOutput | unknown,
+    private readonly result: unknown,
     private readonly throws = false,
   ) {}
 

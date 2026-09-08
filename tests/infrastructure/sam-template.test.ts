@@ -145,14 +145,15 @@ describe('state resources', () => {
     })
   })
 
-  it('defines a standard refinement queue with a three-attempt DLQ redrive', () => {
+  it('encrypts the refinement queue and DLQ with a three-attempt redrive', () => {
     expect(resource('RefinementDeadLetterQueue')).toEqual({
       Type: 'AWS::SQS::Queue',
-      Properties: {},
+      Properties: { SqsManagedSseEnabled: true },
     })
     expect(resource('RefinementQueue')).toEqual({
       Type: 'AWS::SQS::Queue',
       Properties: {
+        SqsManagedSseEnabled: true,
         VisibilityTimeout: 180,
         RedrivePolicy: {
           deadLetterTargetArn: {
@@ -213,7 +214,7 @@ describe('Lambda functions and packaging', () => {
           Format: 'esm',
           OutExtension: ['.js=.mjs'],
           Banner: [
-            'js=import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);',
+            'js=import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
           ],
           Minify: true,
           Sourcemap: false,

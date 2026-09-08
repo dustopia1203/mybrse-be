@@ -13,6 +13,9 @@ export interface DisconnectSessionDependencies {
   repository: SessionLifecycleRepository
 }
 
+/**
+ * Creates a disconnect workflow that preserves sessions and newer connections.
+ */
 export const createDisconnectSession =
   ({ repository }: DisconnectSessionDependencies) =>
   async (input: DisconnectSessionInput): Promise<DisconnectSessionResult> =>

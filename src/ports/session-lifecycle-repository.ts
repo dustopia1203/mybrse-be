@@ -23,9 +23,16 @@ export type DetachByConnectionIdResult =
   | { kind: 'failed'; error: ApplicationError }
 
 export interface SessionLifecycleRepository {
+  /**
+   * Creates or reattaches a session, rejecting a change to its language pair.
+   */
   startOrReattach(
     input: StartOrReattachSessionInput,
   ): Promise<StartOrReattachSessionResult>
+  /**
+   * Detaches only the matching connection, preserving session and segment data.
+   * A delayed disconnect must not detach a newer connection.
+   */
   detachByConnectionId(
     connectionId: string,
   ): Promise<DetachByConnectionIdResult>
