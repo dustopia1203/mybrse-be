@@ -6,7 +6,7 @@
 - `src/ports/` defines interfaces; `src/adapters/aws/` implements DynamoDB, SQS, Translate, Bedrock, and API Gateway integrations.
 - `src/contracts/` defines message schemas; `src/handlers/` contains Lambda handlers; `src/composition/` wires dependencies and configuration.
 - `tests/` mirrors source modules, with reusable `fakes/` and JSON `fixtures/`. LocalStack tests live in `tests/localstack/`; live AWS tests in `tests/integration/aws/`.
-- `infra/template.yaml` defines the SAM stack; `infra/iam/` holds integration-test permissions.
+- `infra/template.yaml` defines the SAM stack; `infra/samconfig/` holds per-environment SAM CLI configuration (`dev`, `stg`, `prod`); `infra/iam/` holds integration-test permissions. See `infra/deployment-guide.md`.
 
 Keep business logic independent of AWS implementations through the port interfaces.
 
