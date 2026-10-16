@@ -1,0 +1,32 @@
+# SAM CLI settings for the prod environment.
+# Pass this file to every SAM command: --config-file infra/samconfig/prod.yaml
+version: 0.1
+default:
+  global:
+    parameters:
+      stack_name: mybrse-backend-prod
+      region: us-east-1
+      profile: mybrse-prod
+  validate:
+    parameters:
+      template_file: infra/template.yaml
+      lint: true
+  build:
+    parameters:
+      template_file: infra/template.yaml
+  deploy:
+    parameters:
+      template_file: .aws-sam/build/template.yaml
+      capabilities: CAPABILITY_IAM
+      confirm_changeset: true
+      fail_on_empty_changeset: false
+      resolve_s3: true
+      s3_prefix: mybrse-backend-prod
+      parameter_overrides: >-
+        StageName=prod
+        DraftProvider=amazon-translate
+        RefinerProvider=amazon-bedrock
+        BedrockModelId=global.amazon.nova-2-lite-v1:0
+        ContextWindowSize=5
+        SessionRetentionSeconds=86400
+      tags: Project=mybrse Environment=prod

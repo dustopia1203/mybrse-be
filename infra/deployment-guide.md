@@ -1,11 +1,48 @@
 # Deploy the MyBRSE Backend to AWS
 
-Run all commands from the repository root.
+Run all commands from the repository root. Each environment has its own SAM CLI
+configuration file, so every deployment uses the same commands and differs only
+in the file passed to `--config-file`.
 
-## 1. Prepare the tools
+## 1. Environments
 
-Install Node.js >=24, pnpm 11.8.0, AWS CLI v2, and AWS SAM CLI.
-Check the versions, then install dependencies:
+| Environment | Config file                 | Stack                 | Stage  | AWS profile   |
+| ----------- | --------------------------- | --------------------- | ------ | ------------- |
+| dev         | `infra/samconfig/dev.yaml`  | `mybrse-backend-dev`  | `dev`  | `mybrse-dev`  |
+| stg         | `infra/samconfig/stg.yaml`  | `mybrse-backend-stg`  | `stg`  | `mybrse-stg`  |
+| prod        | `infra/samconfig/prod.yaml` | `mybrse-backend-prod` | `prod` | `mybrse-prod` |
+
+Each file sets, under its `default` SAM environment:
+
+- `global`: stack name, Region, and AWS profile, shared by every SAM command.
+- `validate` and `build`: the source template `infra/template.yaml`.
+- `deploy`: the built template, `CAPABILITY_IAM`, changeset confirmation,
+  a SAM-managed artifact bucket with a per-stack prefix, stack tags, and
+  `parameter_overrides` for every template parameter.
+
+All environments currently deploy to `us-east-1` with the Bedrock inference
+profile `global.amazon.nova-2-lite-v1:0`, the pair verified by the live AWS
+integration tests.
+
+### Change environment values
+
+Edit the environment's file and commit the change; do not pass
+`--parameter-overrides` or `--guided` on the command line. A command-line
+`--parameter-overrides` replaces the whole list from the file, so any parameter
+it omits falls back to the template default or fails if it has none.
+`--guided` rewrites the configuration file.
+
+`parameter_overrides` is one space-separated string folded across lines; keep
+one `Key=Value` per line without spaces in values. It must set every parameter
+declared in `infra/template.yaml`. `pnpm test` runs
+`tests/infrastructure/samconfig.test.ts`, which checks that each file sets all
+template parameters to allowed values and that stacks and stages are distinct.
+When you add a template parameter, add it to all three files.
+
+## 2. Prepare the tools
+
+Install Node.js >=24, pnpm 11.8.0, AWS CLI v2, and AWS SAM CLI with YAML
+configuration support. Check the versions, then install dependencies:
 
 ```bash
 node --version
@@ -15,118 +52,100 @@ sam --version
 pnpm install --frozen-lockfile
 ```
 
-## 2. Configure AWS access
+## 3. Configure AWS access
 
-Use an AWS test account and a deployment identity authorized to manage
+Each environment uses its own named AWS profile, so environments can live in
+separate accounts. The deployment identity must be authorized to manage
 CloudFormation, deployment artifacts in S3, Lambda, API Gateway, DynamoDB,
 SQS, and the stack's IAM roles and policies, including `iam:PassRole`.
 The integration-test policy in `infra/iam/` does not grant deployment access.
 
-For an IAM User access key, create a named local profile:
+Create the profile for the environment you deploy. For an SSO profile:
 
 ```bash
-aws configure --profile mybrse-deploy
+aws configure sso --profile mybrse-dev
 ```
 
-Enter the access key and secret at the local prompts, your chosen AWS Region,
-and `json` as the output format. If your organization provides an SSO profile,
-use that profile instead in the commands below.
+For an IAM User access key:
 
-SAM does not automatically load the repository's `.env` file. Keep credentials
-in your local AWS configuration, outside the repository.
+```bash
+aws configure --profile mybrse-dev
+```
+
+Enter the Region from the environment's config file and `json` as the output
+format. Keep credentials in your local AWS configuration; SAM does not load the
+repository's `.env` file. Confirm the profile targets the intended account:
+
+```bash
+aws sts get-caller-identity --profile mybrse-dev
+```
+
 See [AWS CLI profiles](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 
-Set the stack name and Region. Replace the example Region with your deployment
-Region:
+## 4. Confirm Bedrock model access
 
-```bash
-export MYBRSE_DEPLOY_REGION='ap-southeast-1'
-export MYBRSE_STACK_NAME='mybrse-backend-test'
-```
-
-## 3. Select the Bedrock model
-
-Open Amazon Bedrock in the selected Region. Choose a model supported by the
-backend's Converse adapter and record its model ID or inference profile ID.
-If you already ran the Bedrock integration test successfully, use the same ID
-and Region.
-
-Complete any model-specific access or subscription requirements in the account.
-You will supply the ID as `BedrockModelId` during deployment.
+Open Amazon Bedrock in the environment's account and Region. Confirm the model
+or inference profile in `BedrockModelId` is available and that any
+model-specific access or subscription requirements are complete. To use a
+different model, choose one supported by the backend's Converse adapter and
+update `BedrockModelId` in the environment's file.
 See [Bedrock model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
 
-## 4. Validate and build
+## 5. Select the environment
+
+Set these variables in the shell you deploy from. Replace `dev` with `stg` or
+`prod` as needed:
+
+```bash
+export MYBRSE_ENV='dev'
+export MYBRSE_SAM_CONFIG="infra/samconfig/${MYBRSE_ENV}.yaml"
+```
+
+## 6. Validate and build
 
 Run each command and resolve any failure before continuing:
 
 ```bash
 pnpm check
-pnpm build
-sam validate --lint --template-file infra/template.yaml
-PATH="$PWD/node_modules/.bin:$PATH" sam build --template-file infra/template.yaml
+sam validate --config-file "$MYBRSE_SAM_CONFIG"
+PATH="$PWD/node_modules/.bin:$PATH" sam build --config-file "$MYBRSE_SAM_CONFIG"
 ```
 
-The absolute PATH entry makes the project's esbuild executable available even
-when SAM changes to a temporary build directory.
-The build must report `Build Succeeded` and produce
+`sam validate` runs with `--lint` from the config file. The absolute PATH entry
+makes the project's esbuild executable available even when SAM changes to a
+temporary build directory. The build must report `Build Succeeded` and produce
 `.aws-sam/build/template.yaml` with artifacts for both Lambda functions.
+
+The build output does not depend on the environment; parameters are applied
+at deployment. Always rebuild from the commit you intend to deploy.
 See [sam build](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-build.html).
 
-## 5. Deploy the stack
-
-The following command uploads artifacts and, after confirmation, creates the
-WebSocket API, two Lambda functions, DynamoDB table, refinement queue, dead-letter
-queue, and IAM roles and policies. AWS usage can incur charges. This template
-exposes a WebSocket API without authentication; use it in your test environment.
+## 7. Deploy the stack
 
 ```bash
-sam deploy --guided \
-  --template-file .aws-sam/build/template.yaml \
-  --stack-name "$MYBRSE_STACK_NAME" \
-  --region "$MYBRSE_DEPLOY_REGION" \
-  --profile mybrse-deploy \
-  --capabilities CAPABILITY_IAM
+sam deploy --config-file "$MYBRSE_SAM_CONFIG"
 ```
 
-Use these values when prompted:
-
-| Setting                              | Value                              |
-| ------------------------------------ | ---------------------------------- |
-| Stack Name                           | `mybrse-backend-test`              |
-| AWS Region                           | Your selected Region               |
-| StageName                            | `dev`                              |
-| DraftProvider                        | `amazon-translate`                 |
-| RefinerProvider                      | `amazon-bedrock`                   |
-| BedrockModelId                       | Your model or inference profile ID |
-| ContextWindowSize                    | `5`                                |
-| SessionRetentionSeconds              | `86400`                            |
-| Confirm changes before deploy        | `Y`                                |
-| Allow IAM role creation, if prompted | `Y`                                |
-| Disable rollback                     | `N`                                |
-| Save arguments to configuration file | `Y`                                |
-| Configuration environment            | `default`                          |
-
-Record the configuration file location reported by SAM. Review the changeset
-and confirm that it targets your test account, Region, and stack before entering
-`Y`. Wait for deployment success and CloudFormation status `CREATE_COMPLETE`.
+SAM uploads artifacts, then shows a changeset that creates or updates the
+WebSocket API, two Lambda functions, the DynamoDB table, the refinement queue
+and dead-letter queue, and IAM roles and policies. Before entering `y`, confirm
+the stack name, account, and Region match the environment. Wait for
+`CREATE_COMPLETE` on the first deployment or `UPDATE_COMPLETE` afterward.
+An unchanged stack reports no changes and exits successfully.
+AWS usage can incur charges.
 See [sam deploy](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-deploy.html).
 
-## 6. Retrieve deployment outputs
+## 8. Retrieve deployment outputs
 
 ```bash
-aws cloudformation describe-stacks \
-  --stack-name "$MYBRSE_STACK_NAME" \
-  --region "$MYBRSE_DEPLOY_REGION" \
-  --profile mybrse-deploy \
-  --query 'Stacks[0].Outputs' \
-  --output table
+sam list stack-outputs --config-file "$MYBRSE_SAM_CONFIG" --output table
 ```
 
 Save `WebSocketUrl`, `TranslationStateTableName`, `RefinementQueueUrl`,
 `RefinementDeadLetterQueueUrl`, `IngressFunctionName`, and `RefineFunctionName`.
-Use the complete WebSocket URL, including the stage suffix `/dev`.
+Use the complete WebSocket URL, including the stage suffix such as `/dev`.
 
-## 7. Verify the deployment
+## 9. Verify the deployment
 
 Connect a WebSocket client to `WebSocketUrl`. Replace the placeholders below
 with fresh lowercase UUID v7 identifiers.
@@ -166,24 +185,31 @@ resource. If messages fail after deployment, open the corresponding Lambda
 function's **Monitor → CloudWatch logs**. For missing refinement results,
 also check the SQS event source mapping, dead-letter queue, and Bedrock access.
 
-## 8. Update the deployment
+## 10. Promote a release
 
-Repeat validation and build in step 4. Run the deployment command in step 5
-with the same stack name, Region, profile, and parameter values. Review the
-changeset before applying it. Wait for `UPDATE_COMPLETE`.
+Deploy the same commit through `dev`, `stg`, and `prod` in order. For each
+environment, set `MYBRSE_ENV`, then repeat steps 6 to 9. Promote only after the
+previous environment passes verification.
 
-## 9. Delete the test deployment
+Before deploying `prod`, note that the template is not yet production-hardened:
 
-When the test stack is no longer needed, run:
+- The WebSocket API accepts unauthenticated connections.
+- The DynamoDB table has no deletion or replacement retention policy, so
+  deleting the stack or replacing the table deletes session data.
+
+Review the `prod` changeset for any replacement of `TranslationStateTable`
+before confirming.
+
+## 11. Delete an environment
+
+When a `dev` or `stg` stack is no longer needed, run:
 
 ```bash
-sam delete \
-  --stack-name "$MYBRSE_STACK_NAME" \
-  --region "$MYBRSE_DEPLOY_REGION" \
-  --profile mybrse-deploy
+sam delete --config-file "$MYBRSE_SAM_CONFIG"
 ```
 
-Review the prompts before confirming. Deleting this stack removes its DynamoDB
-table and data, along with the other stack resources. Check for leftover
-CloudWatch log groups and deployment artifacts afterward.
+Do not delete `prod` unless its data can be discarded. Review the prompts
+before confirming. Deleting a stack removes its DynamoDB table and data, along
+with the other stack resources. Check for leftover CloudWatch log groups and
+deployment artifacts under the stack's S3 prefix afterward.
 See [sam delete](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-delete.html).
